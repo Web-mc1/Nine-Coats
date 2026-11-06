@@ -76,6 +76,7 @@ static var _room_tex: Texture2D = null
 static var _room_img: Image = null
 static var _kitchen_tex: Texture2D = null
 static var _kitchen_img: Image = null
+static var _ing_icon_cache: Array = []
 static var _bubble_cache: Array = []
 static var _village_img: Image = null
 static var _village_tex: Texture2D = null
@@ -1085,6 +1086,55 @@ static func make_plate(col: Color) -> Texture2D:
 	_px(img, 4, 0, AMBER_L)
 	_hline(img, 1, 3, 9, CREAM.darkened(0.15))
 	_outline(img, INK)
+	return ImageTexture.create_from_image(img)
+
+
+static func make_ingredient_icon(id: int) -> Texture2D:
+	while _ing_icon_cache.size() <= id:
+		_ing_icon_cache.append(null)
+	if _ing_icon_cache[id] == null:
+		var img: Image = Image.create(9, 9, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		_draw_ingredient_mark(img, 1, 1, id)
+		_ing_icon_cache[id] = ImageTexture.create_from_image(img)
+	return _ing_icon_cache[id]
+
+
+static func make_block(col: Color, w: int, h: int) -> Texture2D:
+	var img: Image = Image.create(w, h, false, Image.FORMAT_RGBA8)
+	img.fill(col)
+	return ImageTexture.create_from_image(img)
+
+
+# The whole menu on one page: each dish with the two things that make it, what
+# it pays, and a mark if you have cooked it before.
+static func make_book(cooked: Dictionary, dishes: Array) -> Texture2D:
+	var img: Image = Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for y in range(H):
+		for x in range(W):
+			_mix(img, x, y, INK, 0.74)
+	_rect(img, 8, 8, W - 16, H - 18, Color8(24, 19, 20))
+	_frame(img, 8, 8, W - 16, H - 18, AMBER_D)
+	_rect(img, 9, 9, W - 18, H - 20, Color8(36, 29, 28))
+	_hline(img, 9, 9, W - 18, Color8(56, 44, 40))
+	_draw_text(img, "THE BOOK", 20, 16, AMBER)
+	_draw_text(img, "B  CLOSE", W - 68, 16, AMBER_D)
+	_hline(img, 18, 26, W - 36, AMBER_D)
+	for i in range(dishes.size()):
+		var d: Dictionary = dishes[i]
+		var cx: int = 20 + (i / 5) * 148
+		var cy: int = 34 + (i % 5) * 22
+		var known: bool = cooked.has(str(i))
+		var ink: Color = CREAM if known else FOG.darkened(0.34)
+		_draw_ingredient_mark(img, cx, cy, int(d["a"]))
+		_draw_ingredient_mark(img, cx + 8, cy, int(d["b"]))
+		_draw_text(img, str(d["name"]), cx + 20, cy - 1, ink)
+		_draw_text(img, "%d" % int(d["price"]), cx + 118, cy - 1, AMBER_D if known else FOG.darkened(0.44))
+		if known:
+			_rect(img, cx - 5, cy + 1, 2, 2, AMBER)
+	_draw_text(img, "TEN FROM FIVE", 20, 142, FOG.darkened(0.28))
+	_draw_text(img, "%d/10 COOKED" % cooked.size(), 214, 142, AMBER_D)
 	return ImageTexture.create_from_image(img)
 
 

@@ -43,6 +43,10 @@ func _initialize() -> void:
 	_save(village, "res://preview_village.png")
 	_save(_twice(village), "res://preview_village_2x.png")
 
+	var book: Image = Art.make_book({"0": true, "3": true, "6": true, "9": true}, Recipes.DISHES).get_image()
+	_save(book, "res://preview_book.png")
+	_save(_twice(book), "res://preview_book_2x.png")
+
 	print("wrote the preview images")
 	quit()
 

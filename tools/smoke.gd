@@ -151,6 +151,37 @@ func _start() -> void:
 	main.interact()
 	_check("the dish is in hand", main.hand_kind == 2 and main.hand_id == Recipes.dish_for(0, 1))
 
+	# --- the book, and the pot showing its work
+	var pot_keep_kind: int = main.hand_kind
+	var pot_keep_id: int = main.hand_id
+	_check("the book covers the whole menu", Art.make_book({}, Recipes.DISHES).get_size() == Vector2(320.0, 180.0))
+	main._toggle_book()
+	_check("the book opens", main._book_open and main.book_panel.visible)
+	main._toggle_book()
+	_check("and closes again", not main._book_open)
+	_check("cooking is remembered", main.cooked.has(str(pot_keep_id)))
+	main._set_room(1)
+	main.pot_ingredients.clear()
+	main.pot_dish = -1
+	main.pot_cook = 0.0
+	main.hand_kind = 1
+	main.hand_id = 0
+	main.player_pos = main.POT_SPOT + Vector2(0.0, 20.0)
+	main.interact()
+	main._update_pot_visual()
+	_check("a thing in the pot shows as an icon", main.pot_icons[0].visible)
+	_check("and the pot names what the next jar would make", main._jar_dish_name(1) == Recipes.dish_name(Recipes.dish_for(0, 1)))
+	main.hand_kind = 0
+	main.hand_id = -1
+	main.pot_ingredients.clear()
+	main.pot_dish = -1
+	main.pot_cook = 0.0
+	main._update_pot_visual()
+	_check("and the icon goes when the pot is empty", not main.pot_icons[0].visible)
+	main._set_room(0)
+	main.hand_kind = pot_keep_kind
+	main.hand_id = pot_keep_id
+
 	# --- and the village outside the front door
 	var keep_kind: int = main.hand_kind
 	var keep_id: int = main.hand_id

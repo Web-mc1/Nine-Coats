@@ -230,7 +230,15 @@ var _car_x: float = -60.0
 var _car_driving: bool = false
 var _car_wait: float = 6.0
 var bought: Dictionary = {}
+var cooked: Dictionary = {}
 var cook: Dictionary = {}
+var pot_icons: Array = []
+var pot_bar_bg: Sprite2D
+var pot_bar_fill: Sprite2D
+var book_panel: Node2D
+var book_sprite: Sprite2D
+var _book_open: bool = false
+var _book_held: bool = false
 var _table_bowls: Array = []
 var _tts_seen: bool = false
 var _tts_voices: Array = []
@@ -386,6 +394,36 @@ func _build_kitchen() -> void:
 	pot_bubbles.z_index = 3
 	pot_bubbles.visible = false
 	world.add_child(pot_bubbles)
+
+	# what you have actually put in the pot, sitting in the broth
+	pot_icons = []
+	for i in range(2):
+		var ic: Sprite2D = Sprite2D.new()
+		ic.centered = true
+		ic.position = Vector2(247.0 + float(i) * 12.0, 24.0)
+		ic.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		ic.z_index = 1
+		ic.visible = false
+		world.add_child(ic)
+		pot_icons.append(ic)
+
+	pot_bar_bg = Sprite2D.new()
+	pot_bar_bg.texture = Art.make_block(Color(0.09, 0.07, 0.08, 1.0), 26, 3)
+	pot_bar_bg.centered = false
+	pot_bar_bg.position = Vector2(240.0, 34.0)
+	pot_bar_bg.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pot_bar_bg.z_index = 5
+	pot_bar_bg.visible = false
+	world.add_child(pot_bar_bg)
+
+	pot_bar_fill = Sprite2D.new()
+	pot_bar_fill.texture = Art.make_block(Art.AMBER, 24, 1)
+	pot_bar_fill.centered = false
+	pot_bar_fill.position = Vector2(241.0, 35.0)
+	pot_bar_fill.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	pot_bar_fill.z_index = 6
+	pot_bar_fill.visible = false
+	world.add_child(pot_bar_fill)
 
 
 func _has(id: String) -> bool:
@@ -707,6 +745,7 @@ func _set_room(r: int) -> void:
 	if not kit and is_instance_valid(pot_bubbles):
 		pot_bubbles.visible = false
 	_update_hand_icon()
+	_update_pot_visual()
 
 
 # ================================================================ HUD =======
@@ -770,6 +809,29 @@ func _build_hud() -> void:
 	dialogue_hint.set_text("E   ...")
 
 	_build_ledger()
+	_build_book()
+
+
+func _build_book() -> void:
+	book_panel = Node2D.new()
+	book_panel.visible = false
+	hud.add_child(book_panel)
+
+	book_sprite = Sprite2D.new()
+	book_sprite.centered = false
+	book_sprite.position = Vector2.ZERO
+	book_sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	book_panel.add_child(book_sprite)
+
+
+func _toggle_book() -> void:
+	if night_over or _dialogue_open:
+		return
+	_book_open = not _book_open
+	if _book_open:
+		book_sprite.texture = Art.make_book(cooked, Recipes.DISHES)
+		_play_ping()
+	book_panel.visible = _book_open
 
 
 func _build_ledger() -> void:
@@ -963,6 +1025,9 @@ func _start_night() -> void:
 	_dialogue_lines = []
 	dialogue_box.visible = false
 	ledger_panel.visible = false
+	_book_open = false
+	if is_instance_valid(book_panel):
+		book_panel.visible = false
 
 	_set_room(Room.TAPROOM)
 
@@ -1151,7 +1216,7 @@ func _update_prompt() -> void:
 			prompt_text.set_text("THE FIRE IS HOLDING")
 		return
 
-	prompt_text.set_text("")
+	prompt_text.set_text("B    THE BOOK")
 
 
 func _update_kitchen_prompt() -> void:
@@ -1160,10 +1225,13 @@ func _update_kitchen_prompt() -> void:
 		return
 	var jar: int = _near_jar()
 	if jar >= 0:
-		if hand_kind == HAND_EMPTY:
+		var makes: String = _jar_dish_name(jar)
+		if hand_kind != HAND_EMPTY:
+			prompt_text.set_text("YOUR HANDS ARE FULL")
+		elif makes == "":
 			prompt_text.set_text("E    TAKE THE %s" % Recipes.ingredient_name(jar))
 		else:
-			prompt_text.set_text("YOUR HANDS ARE FULL")
+			prompt_text.set_text("E    %s, FOR %s" % [Recipes.ingredient_name(jar), makes])
 		return
 	if _near(POT_SPOT, 30.0):
 		if pot_cook > 0.0:
@@ -1180,10 +1248,16 @@ func _update_kitchen_prompt() -> void:
 		else:
 			prompt_text.set_text("TWO THINGS MAKE A DISH")
 		return
-	prompt_text.set_text("")
+	prompt_text.set_text("B    THE BOOK")
 
 
 # ================================================================ pot ======
+
+func _jar_dish_name(jar: int) -> String:
+	if pot_ingredients.size() != 1:
+		return ""
+	return Recipes.dish_name(Recipes.dish_for(int(pot_ingredients[0]), jar))
+
 
 func _near_jar() -> int:
 	for i in range(JAR_SPOTS.size()):
@@ -1204,6 +1278,8 @@ func _tick_pot(delta: float) -> void:
 			var b: int = int(pot_ingredients[1])
 			pot_dish = Recipes.dish_for(a, b)
 			pot_ingredients.clear()
+			if pot_dish >= 0:
+				cooked[str(pot_dish)] = true
 			dishes_cooked += 1
 			_play_ping()
 			_toast("THE %s IS READY" % Recipes.dish_name(pot_dish))
@@ -1225,6 +1301,23 @@ func _update_pot_visual() -> void:
 		pot_bubbles.visible = true
 	elif pot_cook <= 0.0:
 		pot_bubbles.visible = false
+
+	for i in range(pot_icons.size()):
+		var ic: Sprite2D = pot_icons[i]
+		if not is_instance_valid(ic):
+			continue
+		var show: bool = room == Room.KITCHEN and pot_dish < 0 and pot_cook <= 0.0 and i < pot_ingredients.size()
+		ic.visible = show
+		if show:
+			ic.texture = Art.make_ingredient_icon(int(pot_ingredients[i]))
+
+	if is_instance_valid(pot_bar_bg) and is_instance_valid(pot_bar_fill):
+		var cooking: bool = pot_cook > 0.0 and room == Room.KITCHEN
+		pot_bar_bg.visible = cooking
+		pot_bar_fill.visible = cooking
+		if cooking:
+			var t: float = 1.0 - pot_cook / COOK_TIME
+			pot_bar_fill.scale = Vector2(clampf(t, 0.02, 1.0), 1.0)
 
 
 func _blend_colour() -> Color:
@@ -1444,13 +1537,20 @@ func guest_seated(index: int) -> bool:
 
 func _handle_keys() -> void:
 	var down: bool = Input.is_key_pressed(KEY_E) or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)
+	var b: bool = Input.is_key_pressed(KEY_B)
+	if b and not _book_held:
+		_toggle_book()
+	_book_held = b
 	if down and not _interact_held:
-		interact()
+		if _book_open:
+			_toggle_book()
+		else:
+			interact()
 	_interact_held = down
 
 
 func _handle_movement(delta: float) -> void:
-	if _dialogue_open:
+	if _dialogue_open or _book_open:
 		return
 	var dir: Vector2 = Vector2.ZERO
 	if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
@@ -1820,6 +1920,7 @@ func save_game() -> void:
 		"served": served_total,
 		"ledger": ledger_lines,
 		"upgrades": bought.keys(),
+		"cooked": cooked.keys(),
 	}
 	var f: FileAccess = FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
@@ -1852,3 +1953,7 @@ func load_game() -> void:
 			bought[str(id)] = true
 		if _has("cook"):
 			_spawn_cook()
+	var ck: Variant = data.get("cooked", [])
+	if typeof(ck) == TYPE_ARRAY:
+		for id in ck:
+			cooked[str(id)] = true
