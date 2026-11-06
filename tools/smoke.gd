@@ -5,6 +5,7 @@ extends SceneTree
 #   godot --headless --path . -s tools/smoke.gd
 
 const Art = preload("res://scripts/Art.gd")
+const Audio = preload("res://scripts/Audio.gd")
 const SAVE := "user://ninecoats_smoke.json"
 
 var checks: int = 0
@@ -26,6 +27,38 @@ func _run(main, seconds: float) -> void:
 		main.tick(0.05)
 		if main.night_over:
 			return
+
+
+func _flood(main) -> Dictionary:
+	# walk the whole floor on a 2px grid, the same way the player is allowed to
+	var start := Vector2i(int(main.player_pos.x), int(main.player_pos.y))
+	var seen: Dictionary = {}
+	var queue: Array = []
+	if main._free(Vector2(float(start.x), float(start.y))):
+		seen[start] = true
+		queue.append(start)
+	while queue.size() > 0:
+		var c: Vector2i = queue.pop_back()
+		for d in [Vector2i(2, 0), Vector2i(-2, 0), Vector2i(0, 2), Vector2i(0, -2)]:
+			var n: Vector2i = c + d
+			if n.x < 8 or n.x > 312 or n.y < 60 or n.y > 150:
+				continue
+			if seen.has(n):
+				continue
+			if not main._free(Vector2(float(n.x), float(n.y))):
+				continue
+			seen[n] = true
+			queue.append(n)
+	return seen
+
+
+func _reachable(reach: Dictionary, target: Vector2) -> bool:
+	var t := Vector2i(int(target.x), int(target.y))
+	for dx in range(-8, 9):
+		for dy in range(-8, 9):
+			if reach.has(t + Vector2i(dx, dy)):
+				return true
+	return false
 
 
 func _initialize() -> void:
@@ -55,10 +88,29 @@ func _start() -> void:
 	_check("font has A", Art.glyph_cell("A").x >= 0)
 	_check("character sprite is 12x16", Art.char_tex("player", 0, 0).get_image().get_size() == Vector2i(12, 16))
 
+	# --- the sound exists and is long enough to be real
+	_check("music is synthesised", Audio.music().data.size() > 200000)
+	_check("music loops", Audio.music().loop_mode == AudioStreamWAV.LOOP_FORWARD)
+	_check("footsteps are synthesised", Audio.step().data.size() > 2000)
+	_check("voices are synthesised", Audio.voice().data.size() > 2000)
+	_check("coin ping is synthesised", Audio.ping().data.size() > 2000)
+
 	# --- the inn is standing
 	_check("world built", main.world != null and main.player != null)
 	_check("hud built", main.clock_text != null and main.prompt_text != null)
 	_check("nine tables", main.TABLES.size() == 9)
+
+	# --- you can actually walk everywhere the game needs you to go
+	var reach: Dictionary = _flood(main)
+	_check("walks to the counter", _reachable(reach, main.counter_pos + Vector2(0.0, -12.0)))
+	_check("walks to the hearth", _reachable(reach, main.hearth_pos))
+	_check("walks to the door", _reachable(reach, main.door_pos + Vector2(0.0, 34.0)))
+	_check("walks to the far corner", _reachable(reach, Vector2(300.0, 144.0)))
+	for t in [0, 3, 5]:
+		var seat_pos: Vector2 = main.TABLES[t] + main.SEAT_OFFSET
+		var stand_pos: Vector2 = seat_pos + Vector2(0.0, 10.0)
+		_check("seat %d is clear of furniture" % t, main._free(seat_pos))
+		_check("can stand at table %d" % t, _reachable(reach, stand_pos))
 
 	# --- the evening starts empty
 	_check("night one, 17:00", main.night == 1 and main.clock_min == 17 * 60)

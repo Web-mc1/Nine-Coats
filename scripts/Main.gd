@@ -9,6 +9,7 @@ extends Node2D
 const Art = preload("res://scripts/Art.gd")
 const PixelText = preload("res://scripts/PixelText.gd")
 const Atmosphere = preload("res://scripts/Atmosphere.gd")
+const Audio = preload("res://scripts/Audio.gd")
 
 # --------------------------------------------------------------- constants --
 
@@ -25,10 +26,12 @@ const STEW_PER_NIGHT := 6
 enum GState { AWAY, INBOUND, SITTING, EATING, TALKING, OUTBOUND, GONE }
 const STATE_NAMES: Array = ["away", "inbound", "sitting", "eating", "talking", "outbound", "gone"]
 
+# Nine tables, staggered so every seat has room for a chair and a person to
+# stand in. The middle row is offset to leave gaps in the row below.
 var TABLES: Array = [
-	Vector2(104.0, 80.0), Vector2(168.0, 80.0), Vector2(232.0, 80.0),
-	Vector2(104.0, 106.0), Vector2(168.0, 106.0), Vector2(232.0, 106.0),
-	Vector2(104.0, 130.0), Vector2(168.0, 130.0), Vector2(232.0, 130.0),
+	Vector2(96.0, 76.0), Vector2(160.0, 76.0), Vector2(224.0, 76.0),
+	Vector2(128.0, 106.0), Vector2(192.0, 106.0), Vector2(256.0, 106.0),
+	Vector2(96.0, 134.0), Vector2(160.0, 134.0), Vector2(224.0, 134.0),
 ]
 
 var SEAT_OFFSET := Vector2(0.0, 15.0)
@@ -66,6 +69,7 @@ var GUEST_DATA: Array = [
 		"coat": Color8(112, 96, 78),
 		"table": 0,
 		"hook": 1,
+		"pitch": 0.78,
 		"delay": 12,
 		"lines": [
 			"The road on my map stops at the bridge.",
@@ -78,8 +82,9 @@ var GUEST_DATA: Array = [
 		"name": "SABLE",
 		"trade": "HERON, COURIER",
 		"coat": Color8(92, 108, 132),
-		"table": 4,
+		"table": 3,
 		"hook": 4,
+		"pitch": 1.30,
 		"delay": 70,
 		"lines": [
 			"I'm carrying a letter to a house that isn't there anymore.",
@@ -92,8 +97,9 @@ var GUEST_DATA: Array = [
 		"name": "FENN",
 		"trade": "MOLE, AWAKE",
 		"coat": Color8(84, 92, 74),
-		"table": 7,
+		"table": 5,
 		"hook": 7,
+		"pitch": 0.68,
 		"delay": 132,
 		"lines": [
 			"I can't sleep. Out there the quiet is too big.",
@@ -133,6 +139,11 @@ var ledger_title: PixelText
 var ledger_body: Array = []
 var ledger_hint: PixelText
 
+var music_player: AudioStreamPlayer
+var step_player: AudioStreamPlayer
+var sfx_player: AudioStreamPlayer
+var voice_player: AudioStreamPlayer
+
 # ------------------------------------------------------------------ runtime --
 
 var _time_accum: float = 0.0
@@ -141,6 +152,7 @@ var _fire_t: float = 0.0
 var _anim_t: float = 0.0
 var _facing: int = 0
 var _interact_held: bool = false
+var _last_step_beat: int = 0
 var _dialogue_open: bool = false
 var _dialogue_guest: Dictionary = {}
 var _obstacles: Array = []
@@ -152,6 +164,7 @@ var _table_bowls: Array = []
 func _ready() -> void:
 	_build_world()
 	_build_hud()
+	_build_audio()
 	load_game()
 	_start_night()
 	get_tree().auto_accept_quit = false
@@ -204,14 +217,13 @@ func _build_world() -> void:
 		_add_prop(Art.make_table(), p)
 		_add_prop(Art.make_stool(), p + Vector2(0.0, 2.0))
 		_obstacles.append(Rect2(p.x - 11.0, p.y - 9.0, 22.0, 11.0))
-		_obstacles.append(Rect2(p.x + 5.0, p.y + 4.0, 10.0, 8.0))
 
 	# a candle on a few tables, not all of them
 	for t in [0, 4, 8]:
 		var tp: Vector2 = TABLES[t]
 		_add_prop(Art.make_candle(), tp + Vector2(0.0, -6.0))
 
-	_obstacles.append(Rect2(16.0, 118.0, 60.0, 28.0))
+	_obstacles.append(Rect2(16.0, 112.0, 60.0, 34.0))
 	_obstacles.append(Rect2(70.0, 62.0, 16.0, 10.0))
 	_obstacles.append(Rect2(70.0, 84.0, 16.0, 10.0))
 	_obstacles.append(Rect2(251.0, 54.0, 14.0, 10.0))
@@ -385,6 +397,68 @@ func _label(parent: Node, pos: Vector2, size: int, col: Color) -> PixelText:
 	return t
 
 
+# ================================================================ sound ====
+
+func _build_audio() -> void:
+	music_player = AudioStreamPlayer.new()
+	music_player.volume_db = -17.0
+	add_child(music_player)
+
+	step_player = AudioStreamPlayer.new()
+	step_player.volume_db = -17.0
+	add_child(step_player)
+
+	sfx_player = AudioStreamPlayer.new()
+	sfx_player.volume_db = -11.0
+	add_child(sfx_player)
+
+	voice_player = AudioStreamPlayer.new()
+	voice_player.volume_db = -13.0
+	add_child(voice_player)
+
+	step_player.stream = Audio.step()
+	voice_player.stream = Audio.voice()
+	sfx_player.stream = Audio.ping()
+	_begin_music()
+
+
+func _begin_music() -> void:
+	# let the first frame draw before spending a moment synthesising the loop
+	await get_tree().process_frame
+	if not is_instance_valid(music_player):
+		return
+	music_player.stream = Audio.music()
+	music_player.play()
+
+
+func _play_step() -> void:
+	if not is_instance_valid(step_player):
+		return
+	step_player.pitch_scale = 0.90 + randf() * 0.20
+	step_player.play()
+
+
+func _speak(pitch: float) -> void:
+	if not is_instance_valid(voice_player):
+		return
+	voice_player.pitch_scale = clampf(pitch, 0.5, 2.0)
+	voice_player.play()
+
+
+func _play_ping() -> void:
+	if not is_instance_valid(sfx_player):
+		return
+	sfx_player.stream = Audio.ping()
+	sfx_player.play()
+
+
+func _play_chime() -> void:
+	if not is_instance_valid(sfx_player):
+		return
+	sfx_player.stream = Audio.chime()
+	sfx_player.play()
+
+
 # ============================================================== the night ==
 
 func _start_night() -> void:
@@ -421,6 +495,7 @@ func _start_night() -> void:
 			"path": [],
 			"dir": 0,
 			"arrive": START_MIN + int(data["delay"]),
+			"murmur": 2.0,
 		})
 
 	_update_hud()
@@ -559,7 +634,14 @@ func _update_hud() -> void:
 
 func _update_guests(delta: float) -> void:
 	for g in guests:
-		match int(g["state"]):
+		var st: int = int(g["state"])
+		# guests murmur to themselves while they sit, so the room is never silent
+		if st == GState.SITTING or st == GState.EATING or st == GState.TALKING:
+			g["murmur"] = float(g["murmur"]) - delta
+			if float(g["murmur"]) <= 0.0:
+				g["murmur"] = 4.5 + randf() * 6.0
+				_speak(float(GUEST_DATA[int(g["index"])].get("pitch", 1.0)) * 0.9)
+		match st:
 			GState.AWAY:
 				if clock_min >= int(g["arrive"]):
 					_spawn_guest(g)
@@ -570,6 +652,7 @@ func _update_guests(delta: float) -> void:
 					g["dir"] = 1
 					_face_actor(g["sprite"], 1, 0)
 					_toast("A COAT ON THE RACK")
+					_speak(float(GUEST_DATA[int(g["index"])].get("pitch", 1.0)))
 			GState.SITTING:
 				g["patience"] = float(g["patience"]) - delta
 				if float(g["patience"]) <= 0.0:
@@ -709,21 +792,26 @@ func _handle_movement(delta: float) -> void:
 
 	if dir == Vector2.ZERO:
 		_walk_t = 0.0
+		_last_step_beat = 0
 		_face_actor(player, _facing, 0)
 		return
 
 	dir = dir.normalized()
 	_facing = _dir_from_vec(dir)
-	_walk_t += delta * 7.0
+	_walk_t += delta * 5.5
 	_move_player(dir * PLAYER_SPEED * delta)
-	_face_actor(player, _facing, int(_walk_t) % 2)
+	var beat: int = int(_walk_t) % 2
+	if beat != _last_step_beat:
+		_last_step_beat = beat
+		_play_step()
+	_face_actor(player, _facing, beat)
 
 
 func _move_player(delta: Vector2) -> void:
-	var nx: float = clampf(player_pos.x + delta.x, 10.0, 310.0)
+	var nx: float = clampf(player_pos.x + delta.x, 8.0, 312.0)
 	if _free(Vector2(nx, player_pos.y)):
 		player_pos.x = nx
-	var ny: float = clampf(player_pos.y + delta.y, 62.0, 146.0)
+	var ny: float = clampf(player_pos.y + delta.y, 60.0, 150.0)
 	if _free(Vector2(player_pos.x, ny)):
 		player_pos.y = ny
 
@@ -815,6 +903,7 @@ func _serve(g: Dictionary) -> void:
 	bowl.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	ysort.add_child(bowl)
 	_table_bowls.append(bowl)
+	_play_ping()
 	_toast("THEY NOD AND EAT")
 
 
@@ -841,6 +930,7 @@ func _show_dialogue_line() -> void:
 	if i >= 0 and i < lines.size():
 		dialogue_line.set_text(str(lines[i]))
 	dialogue_hint.set_text("E    ...")
+	_speak(float(data.get("pitch", 1.0)))
 
 
 func _advance_dialogue() -> void:
@@ -899,6 +989,7 @@ func _end_night() -> void:
 		else:
 			t.set_text("")
 	ledger_panel.visible = true
+	_play_chime()
 	save_game()
 
 

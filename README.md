@@ -54,6 +54,9 @@ small story.
   come down as they go.
 - Carrying, serving, coins, a fire to keep, a ledger, and a saved game in
   `user://ninecoats_save.json`.
+- Sound, all synthesised in code: a slow piano loop for the evening, boots on
+  the boards as you walk, a ping when a bowl is paid for, and a small voice for
+  each animal when they speak to you.
 
 Deliberately not in it: farming, fishing, seasons, romance, combat, weather
 simulation. Each of those is a second game.
@@ -77,6 +80,7 @@ scripts/Art.gd        every pixel in the game
 scripts/Main.gd       the evening: clock, guests, serving, ledger, save
 scripts/PixelText.gd  bitmap text rendering
 scripts/Atmosphere.gd rain on the glass, steam off the pot
+scripts/Audio.gd      synthesised music, footsteps, voices (no audio files)
 tools/smoke.gd        headless test that drives a whole night
 tools/preview.gd      composites preview.png from the art code, no GPU needed
 ```

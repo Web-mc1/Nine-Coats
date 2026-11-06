@@ -8,9 +8,9 @@ extends SceneTree
 const Art = preload("res://scripts/Art.gd")
 
 var TABLES: Array = [
-	Vector2(104.0, 80.0), Vector2(168.0, 80.0), Vector2(232.0, 80.0),
-	Vector2(104.0, 106.0), Vector2(168.0, 106.0), Vector2(232.0, 106.0),
-	Vector2(104.0, 130.0), Vector2(168.0, 130.0), Vector2(232.0, 130.0),
+	Vector2(96.0, 76.0), Vector2(160.0, 76.0), Vector2(224.0, 76.0),
+	Vector2(128.0, 106.0), Vector2(192.0, 106.0), Vector2(256.0, 106.0),
+	Vector2(96.0, 134.0), Vector2(160.0, 134.0), Vector2(224.0, 134.0),
 ]
 
 
@@ -49,7 +49,7 @@ func _compose_world() -> Image:
 		var t: Vector2 = TABLES[i]
 		_blit_base(img, Art.make_table(), t)
 		_blit_base(img, Art.make_stool(), t + Vector2(0.0, 2.0))
-	for c in [0, 4, 8]:
+	for c in [1, 4, 8]:
 		_blit_base(img, Art.make_candle(), TABLES[c] + Vector2(0.0, -6.0))
 	_blit_base(img, Art.make_counter(), Vector2(46.0, 146.0))
 
@@ -59,12 +59,12 @@ func _compose_world() -> Image:
 	# characters: the innkeeper, and three guests at their tables
 	_blit_char(img, "player", 0, 0, Vector2(86.0, 120.0))
 	_blit_char(img, "badger", 1, 0, TABLES[0] + Vector2(0.0, 15.0))
-	_blit_char(img, "heron", 1, 0, TABLES[4] + Vector2(0.0, 15.0))
-	_blit_char(img, "mole", 1, 0, TABLES[7] + Vector2(0.0, 15.0))
+	_blit_char(img, "heron", 1, 0, TABLES[3] + Vector2(0.0, 15.0))
+	_blit_char(img, "mole", 1, 0, TABLES[5] + Vector2(0.0, 15.0))
 
 	# bowls on the served tables
 	_blit_base(img, Art.make_bowl(), TABLES[0] + Vector2(0.0, 13.0))
-	_blit_base(img, Art.make_bowl(), TABLES[4] + Vector2(0.0, 13.0))
+	_blit_base(img, Art.make_bowl(), TABLES[3] + Vector2(0.0, 13.0))
 
 	# coats on the rack
 	var coats: Array = [

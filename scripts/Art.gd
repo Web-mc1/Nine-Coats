@@ -174,6 +174,7 @@ static func room_image() -> Image:
 	_draw_door(img)
 	_draw_rack(img)
 	_draw_herbs(img)
+	_draw_wall_art(img)
 	_warm_grade(img)
 	_room_img = img
 	return _room_img
@@ -268,6 +269,10 @@ static func _draw_beam(img: Image) -> void:
 	_hline(img, 0, 3, W, WOOD_L)
 	_hline(img, 0, 7, W, WOOD_D)
 	_hline(img, 0, 9, W, INK)
+	# the beam lays a soft shadow down the stone
+	for x in range(0, W):
+		for dy in range(0, 4):
+			_mix(img, x, 10 + dy, INK, 0.26 - dy * 0.06)
 	# a few bolt heads
 	for x in range(18, W, 46):
 		_px(img, x, 5, WOOD_D)
@@ -425,6 +430,12 @@ static func _draw_door(img: Image) -> void:
 	_rect(img, x + w - 6, y + 20, 2, 3, AMBER_D)
 	# a crack of amber light under the door
 	_rect(img, x, y + h - 2, w, 1, AMBER)
+	# a mat, and the wet the road brought in
+	_rect(img, x + 4, WALL_H + 5, 24, 8, WOOD_D)
+	_frame(img, x + 4, WALL_H + 5, 24, 8, WOOD)
+	_hline(img, x + 7, WALL_H + 8, 18, WOOD)
+	_ellipse(img, float(x + 20), float(WALL_H + 20), 10.0, 4.0, SLATE_D, 0.40)
+	_ellipse(img, float(x + 20), float(WALL_H + 20), 6.0, 2.0, SLATE, 0.30)
 	# the wedge of warm light and fog that spills in
 	for yy in range(0, 30):
 		var ww: int = int(12.0 + yy * 2.4)
@@ -475,6 +486,20 @@ static func _draw_herbs(img: Image) -> void:
 		_rect(img, x - 1, 14, 4, 1, RUST)
 
 
+static func _draw_wall_art(img: Image) -> void:
+	# a small framed picture between the hearth and the curtain
+	var x: int = 46
+	var y: int = 27
+	_rect(img, x, y, 12, 11, WOOD)
+	_frame(img, x, y, 12, 11, WOOD_L)
+	_rect(img, x + 2, y + 2, 8, 7, SLATE_D)
+	_rect(img, x + 3, y + 5, 6, 3, SLATE)
+	_hline(img, x + 3, y + 4, 6, SLATE.lightened(0.15))
+	_px(img, x + 8, y + 3, AMBER_L)
+	# and a nail above it
+	_px(img, x + 6, y - 2, IRON)
+
+
 static func _warm_grade(img: Image) -> void:
 	var lights: Array = [
 		[LANTERN_XS[0], 25, 52.0, AMBER, 0.34],
@@ -519,12 +544,18 @@ static func _warm_grade(img: Image) -> void:
 static func make_table() -> Texture2D:
 	var img: Image = Image.create(22, 18, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+	# a soft shadow on the boards
+	for x in range(1, 21):
+		_mix(img, x, 15, INK, 0.26)
+		_mix(img, x, 16, INK, 0.14)
 	# legs
 	_rect(img, 3, 12, 2, 6, WOOD_D)
 	_rect(img, 17, 12, 2, 6, WOOD_D)
 	# top
 	_rect(img, 1, 5, 20, 8, PLANK_L)
 	_rect(img, 1, 5, 20, 2, CREAM.lerp(PLANK_L, 0.55))
+	_hline(img, 3, 9, 15, WOOD_D.lerp(PLANK_L, 0.45))
+	_hline(img, 6, 11, 10, WOOD_D.lerp(PLANK_L, 0.40))
 	_hline(img, 1, 12, 20, WOOD_D)
 	_frame(img, 1, 5, 20, 8, WOOD_D)
 	# boards
@@ -559,6 +590,9 @@ static func make_stool() -> Texture2D:
 static func make_counter() -> Texture2D:
 	var img: Image = Image.create(60, 34, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+	for x in range(2, 58):
+		_mix(img, x, 32, INK, 0.30)
+		_mix(img, x, 33, INK, 0.16)
 	# front panel
 	_rect(img, 2, 6, 56, 26, WOOD)
 	for i in range(0, 56, 9):
@@ -590,6 +624,8 @@ static func make_counter() -> Texture2D:
 static func make_barrel() -> Texture2D:
 	var img: Image = Image.create(16, 20, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+	for x in range(1, 15):
+		_mix(img, x, 19, INK, 0.32)
 	_rect(img, 2, 2, 12, 17, WOOD)
 	_rect(img, 1, 5, 14, 12, WOOD)
 	_hline(img, 1, 8, 14, IRON)
@@ -604,6 +640,8 @@ static func make_barrel() -> Texture2D:
 static func make_crate() -> Texture2D:
 	var img: Image = Image.create(16, 15, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+	for x in range(1, 15):
+		_mix(img, x, 14, INK, 0.30)
 	_rect(img, 1, 2, 14, 12, WOOD)
 	_frame(img, 1, 2, 14, 12, WOOD_D)
 	_rect(img, 1, 2, 14, 2, WOOD_L)
@@ -617,6 +655,8 @@ static func make_crate() -> Texture2D:
 static func make_plant() -> Texture2D:
 	var img: Image = Image.create(14, 20, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
+	for x in range(2, 12):
+		_mix(img, x, 19, INK, 0.28)
 	# terracotta pot
 	_rect(img, 3, 13, 8, 7, RUST)
 	_rect(img, 2, 12, 10, 2, RUST_D)
