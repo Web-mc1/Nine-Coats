@@ -1,0 +1,14 @@
+# Godot
+.godot/
+
+# builds
+build/
+*.exe
+*.x86_64
+*.pck
+*.zip
+
+# generated art previews
+preview.png
+preview_dialogue.png
+preview_2x.png
