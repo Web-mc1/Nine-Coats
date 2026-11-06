@@ -269,7 +269,7 @@ static func _draw_rug(img: Image) -> void:
 	_ellipse(img, cx, cy + 3.0, 24.0, 10.0, PLANK, 0.18)
 
 
-static func _draw_beam(img: Image) -> void:
+static func _draw_beam(img: Image, lanterns: Array = LANTERN_XS) -> void:
 	_rect(img, 0, 0, W, 3, INK)
 	_rect(img, 0, 3, W, 7, WOOD)
 	_hline(img, 0, 3, W, WOOD_L)
@@ -284,7 +284,7 @@ static func _draw_beam(img: Image) -> void:
 		_px(img, x, 5, WOOD_D)
 		_px(img, x + 1, 5, WOOD_L)
 	# lantern chains and lanterns
-	for lx in LANTERN_XS:
+	for lx in lanterns:
 		var x: int = lx
 		_vline(img, x, 10, 8, IRON)
 		_px(img, x - 1, 18, IRON)
@@ -1127,15 +1127,19 @@ static func kitchen_image() -> Image:
 	img.fill(INK)
 	_draw_wall(img)
 	_draw_floor(img)
-	_draw_beam(img)
+	_draw_beam(img, [40, 286])
+	_draw_kitchen_runner(img)
 	_draw_kitchen_mat(img)
+	_draw_kitchen_sideboard(img)
 	_draw_kitchen_shelf(img)
 	_draw_kitchen_pans(img)
 	_draw_kitchen_prep(img)
 	_draw_kitchen_stove(img)
-	_draw_kitchen_signs(img)
-	_draw_passage(img, W - 28, false, 28)
+	# the grade goes on the light, then the signs and the doorway stay crisp on
+	# top of it, the way paint on a board should
 	_kitchen_grade(img)
+	_draw_passage(img, W - 28, false, 28)
+	_draw_kitchen_signs(img)
 	_kitchen_img = img
 	return _kitchen_img
 
@@ -1182,26 +1186,80 @@ static func _draw_kitchen_mat(img: Image) -> void:
 
 
 static func _draw_kitchen_shelf(img: Image) -> void:
-	var x0: int = 96
-	var w: int = 110
-	# board and brackets
-	_rect(img, x0, 44, w, 5, WOOD)
-	_hline(img, x0, 44, w, WOOD_L)
-	_hline(img, x0, 48, w, WOOD_D)
-	for bx in [x0 + 10, x0 + w / 2, x0 + w - 12]:
-		_rect(img, bx, 49, 2, 6, WOOD_D)
-	# jars, in a row, waiting
-	var cols: Array = [Color8(168, 126, 104), Color8(214, 190, 140), Color8(206, 176, 196), Color8(126, 158, 106), Color8(242, 204, 110)]
+	# one long dresser: five jars on the board, and under each jar its own card
+	var x0: int = 74
+	var w: int = 150
+	var cols: Array = [
+		Color8(168, 126, 104), Color8(214, 190, 140), Color8(206, 176, 196),
+		Color8(126, 158, 106), Color8(242, 204, 110),
+	]
+	_rect(img, x0, 38, w, 5, WOOD)
+	_hline(img, x0, 38, w, WOOD_L)
+	_hline(img, x0, 42, w, WOOD_D)
+	for bx in [x0 + 8, x0 + w / 2 - 1, x0 + w - 10]:
+		_rect(img, bx, 43, 2, 7, WOOD_D)
 	for i in range(5):
-		_draw_jar_at(img, x0 + 14 + i * 24, 34, cols[i])
-	# a lower shelf with bowls and a crock
-	_rect(img, x0 + 20, 62, 60, 4, WOOD)
-	_hline(img, x0 + 20, 62, 60, WOOD_L)
-	for i in range(3):
-		_rect(img, x0 + 24 + i * 9, 59, 7, 3, CREAM)
-		_hline(img, x0 + 24 + i * 9, 59, 7, CREAM.lightened(0.2))
-	_rect(img, x0 + 58, 54, 14, 8, SLATE_D)
-	_rect(img, x0 + 58, 54, 14, 1, SLATE)
+		var jx: int = x0 + 15 + i * 30
+		_draw_jar_at(img, jx, 28, cols[i])
+		_kitchen_card(img, jx - 4, 44, i)
+	# a crock of spoons at the far end
+	_rect(img, x0 + w + 4, 54, 12, 12, SLATE_D)
+	_rect(img, x0 + w + 4, 54, 12, 1, SLATE)
+	_vline(img, x0 + w + 8, 46, 9, WOOD_L)
+	_vline(img, x0 + w + 11, 48, 7, WOOD_L)
+
+
+static func _kitchen_card(img: Image, x: int, y: int, id: int) -> void:
+	_rect(img, x, y, 16, 9, CREAM)
+	_frame(img, x, y, 16, 9, WOOD_D)
+	_hline(img, x + 1, y + 1, 14, CREAM.lightened(0.2))
+	_draw_ingredient_mark(img, x + 4, y + 1, id)
+
+
+static func _draw_kitchen_sideboard(img: Image) -> void:
+	# a tall sideboard down the left wall, so the room is not just floor
+	var x: int = 4
+	var y: int = 148
+	_rect(img, x, y - 46, 24, 46, WOOD)
+	_rect(img, x, y - 46, 24, 3, WOOD_L)
+	for band in [30, 14]:
+		_hline(img, x, y - band, 24, WOOD_D)
+	for i in range(2):
+		_vline(img, x + 4 + i * 16, y - 44, 42, WOOD_D)
+	_px(img, x + 12, y - 34, AMBER_D)
+	_px(img, x + 12, y - 18, AMBER_D)
+	# bowls and a crock on top
+	_rect(img, x + 4, y - 52, 8, 6, CREAM)
+	_rect(img, x + 14, y - 50, 7, 4, SLATE_D)
+	_rect(img, x + 3, y - 56, 4, 4, CREAM)
+	# a flour barrel and a crate beside it
+	_rect(img, 38, 132, 14, 16, WOOD)
+	_rect(img, 38, 132, 14, 2, WOOD_L)
+	_hline(img, 38, 136, 14, WOOD_D)
+	_hline(img, 38, 143, 14, WOOD_D)
+	_rect(img, 39, 131, 12, 1, WOOD_D)
+	_rect(img, 58, 136, 12, 12, WOOD)
+	_frame(img, 58, 136, 12, 12, WOOD_D)
+	_vline(img, 59, 137, 10, WOOD_D)
+	_vline(img, 68, 137, 10, WOOD_D)
+	_hline(img, 59, 141, 10, WOOD_D)
+
+
+static func _draw_kitchen_runner(img: Image) -> void:
+	# a worn runner from the doorway towards the stove
+	var wool: Color = Color8(80, 56, 54)
+	var weave: Color = Color8(98, 70, 62)
+	_rect(img, 150, 132, 152, 18, WOOD_D)
+	_rect(img, 152, 134, 148, 14, wool)
+	for i in range(6):
+		_vline(img, 158 + i * 24, 134, 14, weave)
+	_hline(img, 152, 134, 148, weave)
+	_hline(img, 152, 147, 148, WOOD_D)
+
+
+static func _draw_village_signs(img: Image) -> void:
+	_sign(img, 34, 46, 32, 16, ["NINE", "COATS"])
+	_sign(img, 196, 22, 78, 14, ["GROCER"])
 
 
 static func _draw_jar_at(img: Image, x: int, y: int, col: Color) -> void:
@@ -1333,6 +1391,7 @@ static func village_image() -> Image:
 	_draw_shop_front(img)
 	_draw_street_lamp(img)
 	_village_grade(img)
+	_draw_village_signs(img)
 	_village_img = img
 	return _village_img
 
@@ -1483,7 +1542,6 @@ static func _draw_shop_front(img: Image) -> void:
 	_rect(img, 292, 52, 22, 56, WOOD_D)
 	_rect(img, 294, 54, 18, 54, WOOD)
 	_rect(img, 306, 78, 2, 3, AMBER_D)
-	_sign(img, 196, 22, 78, 14, ["GROCER"])
 	for i in range(18):
 		var ax: int = 168 + i * 8
 		_rect(img, ax, 34, 8, 7, RUST if i % 2 == 0 else CREAM.lerp(RUST, 0.75))
@@ -1540,17 +1598,10 @@ static func _village_grade(img: Image) -> void:
 
 
 static func _draw_kitchen_signs(img: Image) -> void:
-	# words, so the kitchen reads at a glance
-	_draw_text(img, "PANTRY", 130, 24, CREAM)
-	_hline(img, 126, 33, 44, WOOD_D)
-	_draw_text(img, "POT", 243, 6, CREAM)
-	_draw_text(img, "ROOM", 291, 20, CREAM)
-	# a little card under each jar, with what is in it
-	for i in range(5):
-		var x: int = 102 + i * 24
-		_rect(img, x, 50, 16, 10, CREAM.darkened(0.05))
-		_frame(img, x, 50, 16, 10, WOOD_D)
-		_draw_ingredient_mark(img, x + 4, 52, i)
+	# painted boards, not floating letters
+	_sign(img, 96, 12, 62, 14, ["PANTRY"])
+	_sign(img, 232, 10, 34, 13, ["POT"])
+	_sign(img, 284, 108, 32, 13, ["ROOM"])
 
 
 static func _draw_ingredient_mark(img: Image, x: int, y: int, id: int) -> void:

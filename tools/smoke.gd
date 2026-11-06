@@ -239,6 +239,28 @@ func _start() -> void:
 	main.interact()
 	_check("the fire was fed", main.fire > 0.40)
 
+	# --- upgrades, and someone to help in the kitchen
+	main.coins = 200
+	main.player_pos = main.counter_pos + Vector2(0.0, -20.0)
+	main.interact()
+	_check("bought the first upgrade", main.bought.has("boots"))
+	_check("and it cost coins", main.coins == 200 - 30)
+	_check("boots make you faster", main._speed() > main.PLAYER_SPEED)
+	for i in range(3):
+		main.interact()
+	_check("the cook was hired", main.bought.has("cook") and not main.cook.is_empty())
+	main.pot_ingredients.clear()
+	main.pot_dish = -1
+	main.pot_cook = 0.0
+	main.guests[1]["state"] = 2
+	main.guests[1]["order"] = 4
+	main.guests[1]["patience"] = 9999.0
+	var guard2: int = 0
+	while main.pot_dish < 0 and guard2 < 1400:
+		main.tick(0.05)
+		guard2 += 1
+	_check("the cook filled the pot on her own", main.pot_dish == 4)
+
 	main.clock_min = 23 * 60 - 1
 	main.tick(2.0)
 	_check("the night ended", main.night_over)

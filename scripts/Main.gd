@@ -56,8 +56,8 @@ var PASSAGE_KIT := Vector2(308.0, 82.0)
 
 # the five jars on the kitchen shelf, and the pot on the stove
 var JAR_SPOTS: Array = [
-	Vector2(110.0, 62.0), Vector2(134.0, 62.0), Vector2(158.0, 62.0),
-	Vector2(182.0, 62.0), Vector2(206.0, 62.0),
+	Vector2(93.0, 62.0), Vector2(123.0, 62.0), Vector2(153.0, 62.0),
+	Vector2(183.0, 62.0), Vector2(213.0, 62.0),
 ]
 var POT_SPOT := Vector2(253.0, 84.0)
 
@@ -70,6 +70,14 @@ var SHOP_SPOTS: Array = [
 	Vector2(262.0, 92.0), Vector2(286.0, 92.0),
 ]
 var SHOP_PRICES: Array = [3, 2, 2, 3, 4]
+
+# things you can build for the inn, in the order they are offered
+var UPGRADES: Array = [
+	{"id": "boots", "name": "FASTER BOOTS", "price": 30},
+	{"id": "larder", "name": "A BIGGER LARDER", "price": 40},
+	{"id": "hearth", "name": "A BETTER HEARTH", "price": 35},
+	{"id": "cook", "name": "HIRE A COOK", "price": 60},
+]
 
 var BOUNDS_MIN := Vector2(8.0, 60.0)
 var BOUNDS_MAX := Vector2(312.0, 150.0)
@@ -221,6 +229,8 @@ var car: Sprite2D
 var _car_x: float = -60.0
 var _car_driving: bool = false
 var _car_wait: float = 6.0
+var bought: Dictionary = {}
+var cook: Dictionary = {}
 var _table_bowls: Array = []
 var _tts_seen: bool = false
 var _tts_voices: Array = []
@@ -378,6 +388,132 @@ func _build_kitchen() -> void:
 	world.add_child(pot_bubbles)
 
 
+func _has(id: String) -> bool:
+	return bought.has(id)
+
+
+func _speed() -> float:
+	return PLAYER_SPEED * (1.35 if _has("boots") else 1.0)
+
+
+func _shop_price(i: int) -> int:
+	var price: int = int(SHOP_PRICES[i])
+	if _has("larder"):
+		price = maxi(1, price - 1)
+	return price
+
+
+func _next_upgrade() -> Dictionary:
+	for u in UPGRADES:
+		if not _has(str(u["id"])):
+			return u
+	return {}
+
+
+func _buy_upgrade() -> void:
+	var u: Dictionary = _next_upgrade()
+	if u.is_empty():
+		_toast("THE OLD PLACE HAS EVERYTHING")
+		return
+	var price: int = int(u["price"])
+	if coins < price:
+		_toast("NOT ENOUGH IN THE TIN")
+		return
+	coins = coins - price
+	bought[str(u["id"])] = true
+	_play_ping()
+	if str(u["id"]) == "cook":
+		_spawn_cook()
+		_toast("A COOK, AND SHE KNOWS HER WAY AROUND A POT")
+	else:
+		_toast("%s. IT IS DONE" % str(u["name"]))
+	save_game()
+
+
+func _spawn_cook() -> void:
+	if not cook.is_empty():
+		return
+	var s: Sprite2D = _make_actor("hare", Vector2(200.0, 96.0), kit_root)
+	cook = {"node": s, "state": 0, "target": Vector2(200.0, 96.0), "jar": -1, "carry": -1}
+
+
+func _cook_plan() -> int:
+	# what the pot is missing for whoever is waiting right now
+	var order: int = -1
+	for g in guests:
+		if int(g["state"]) == GState.SITTING:
+			order = int(g["order"])
+			break
+	if order < 0 or order >= Recipes.count():
+		return -1
+	var d: Dictionary = Recipes.DISHES[order]
+	var a: int = int(d["a"])
+	var b: int = int(d["b"])
+	if pot_ingredients.size() == 0:
+		return a
+	if pot_ingredients.size() == 1:
+		var have: int = int(pot_ingredients[0])
+		if have == a:
+			return b
+		if have == b:
+			return a
+	return -1
+
+
+func _move_cook(s: Sprite2D, delta: float) -> bool:
+	var to: Vector2 = cook["target"] - s.position
+	var step: float = 30.0 * delta
+	if to.length() <= step:
+		s.position = cook["target"]
+		return true
+	s.position = s.position + to.normalized() * step
+	_face_actor(s, _dir_from_vec(to), int(_anim_t * 7.0) % 4)
+	return false
+
+
+func _update_cook(delta: float) -> void:
+	if cook.is_empty():
+		return
+	var s: Sprite2D = cook["node"]
+	if s == null or not is_instance_valid(s):
+		return
+	var st: int = int(cook["state"])
+	if st == 0:
+		if pot_cook > 0.0 or pot_dish >= 0:
+			return
+		if pot_ingredients.size() >= 2:
+			cook["state"] = 3
+			cook["target"] = Vector2(253.0, 86.0)
+			return
+		var want: int = _cook_plan()
+		if want < 0:
+			return
+		cook["jar"] = want
+		cook["state"] = 1
+		cook["target"] = Vector2(JAR_SPOTS[want].x, 76.0)
+		return
+	if st == 1:
+		if _move_cook(s, delta):
+			cook["carry"] = int(cook["jar"])
+			cook["state"] = 2
+			cook["target"] = Vector2(253.0, 86.0)
+		return
+	if st == 2:
+		if _move_cook(s, delta):
+			if int(cook["carry"]) >= 0 and pot_ingredients.size() < 2:
+				pot_ingredients.append(int(cook["carry"]))
+			cook["carry"] = -1
+			cook["state"] = 0
+			_update_pot_visual()
+		return
+	if st == 3:
+		if _move_cook(s, delta):
+			pot_cook = COOK_TIME
+			_update_pot_visual()
+			cook["state"] = 0
+			_toast("THE COOK SETS IT GOING")
+
+
 func _build_village() -> void:
 	# the fronts along the street, which you cannot walk through
 	_obstacles_vil.append(Rect2(0.0, 12.0, 96.0, 92.0))
@@ -472,7 +608,7 @@ func _update_village_prompt() -> void:
 		return
 	var i: int = _near_basket()
 	if i >= 0:
-		var price: int = int(SHOP_PRICES[i])
+		var price: int = _shop_price(i)
 		if hand_kind != HAND_EMPTY:
 			prompt_text.set_text("YOUR HANDS ARE FULL")
 		elif coins < price:
@@ -495,10 +631,10 @@ func _interact_village() -> void:
 	if hand_kind != HAND_EMPTY:
 		_toast("YOUR HANDS ARE FULL")
 		return
-	if coins < int(SHOP_PRICES[i]):
+	if coins < _shop_price(i):
 		_toast("NOT ENOUGH IN THE TIN")
 		return
-	coins = coins - int(SHOP_PRICES[i])
+	coins = coins - _shop_price(i)
 	hand_kind = HAND_INGREDIENT
 	hand_id = i
 	_play_ping()
@@ -894,9 +1030,10 @@ func tick(delta: float) -> void:
 	_fire_t += delta
 	var frames: Array = Art.fire_frames()
 	fire_sprite.texture = frames[int(_fire_t * 8.0) % frames.size()]
-	fire = maxf(0.0, fire - delta * 0.010)
+	fire = maxf(0.0, fire - delta * (0.006 if _has("hearth") else 0.010))
 	_update_glow()
 	_tick_pot(delta)
+	_update_cook(delta)
 
 	if night_over:
 		return
@@ -996,6 +1133,16 @@ func _update_prompt() -> void:
 		if st == GState.TALKING:
 			prompt_text.set_text("E    LISTEN")
 			return
+
+	if _near(counter_pos, 30.0):
+		var u: Dictionary = _next_upgrade()
+		if u.is_empty():
+			prompt_text.set_text("NOTHING LEFT TO BUILD")
+		elif coins < int(u["price"]):
+			prompt_text.set_text("%s COSTS %d COINS" % [str(u["name"]), int(u["price"])])
+		else:
+			prompt_text.set_text("E    BUILD %s, %d COINS" % [str(u["name"]), int(u["price"])])
+		return
 
 	if _near(hearth_pos, 26.0):
 		if fire < 0.85:
@@ -1324,7 +1471,7 @@ func _handle_movement(delta: float) -> void:
 	dir = dir.normalized()
 	_facing = _dir_from_vec(dir)
 	_walk_t += delta * 3.4
-	_move_player(dir * PLAYER_SPEED * delta)
+	_move_player(dir * _speed() * delta)
 	var beat: int = (int(_walk_t) / 2) % 2
 	if beat != _last_step_beat:
 		_last_step_beat = beat
@@ -1419,6 +1566,10 @@ func interact() -> void:
 		if st == GState.TALKING:
 			_open_dialogue(g)
 			return
+
+	if _near(counter_pos, 30.0):
+		_buy_upgrade()
+		return
 
 	if _near(hearth_pos, 26.0):
 		if fire < 0.98:
@@ -1668,6 +1819,7 @@ func save_game() -> void:
 		"coins": coins,
 		"served": served_total,
 		"ledger": ledger_lines,
+		"upgrades": bought.keys(),
 	}
 	var f: FileAccess = FileAccess.open(save_path, FileAccess.WRITE)
 	if f == null:
@@ -1694,3 +1846,9 @@ func load_game() -> void:
 	var led: Variant = data.get("ledger", [])
 	if typeof(led) == TYPE_ARRAY:
 		ledger_lines = led
+	var ups: Variant = data.get("upgrades", [])
+	if typeof(ups) == TYPE_ARRAY:
+		for id in ups:
+			bought[str(id)] = true
+		if _has("cook"):
+			_spawn_cook()
