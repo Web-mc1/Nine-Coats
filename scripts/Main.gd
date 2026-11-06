@@ -285,9 +285,9 @@ func _build_taproom() -> void:
 	for i in range(TABLES.size()):
 		var p: Vector2 = TABLES[i]
 		_add_prop(Art.make_table(), p, tap_root)
-		_add_prop(Art.make_stool(), p + Vector2(0.0, 2.0), tap_root)
-		# a chair pulled out at every seat
-		_add_prop(Art.make_chair(), p + SEAT_OFFSET + Vector2(0.0, 1.0), tap_root)
+		# one chair at every seat, sitting exactly where the guest sits so the
+		# back reads as being behind them
+		_add_prop(Art.make_chair(), p + SEAT_OFFSET, tap_root)
 		_obstacles_tap.append(Rect2(p.x - 11.0, p.y - 9.0, 22.0, 11.0))
 
 	for t in [0, 4, 8]:

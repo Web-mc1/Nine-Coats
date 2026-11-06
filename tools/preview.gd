@@ -54,9 +54,8 @@ func _compose_taproom() -> Image:
 
 	for i in range(TABLES.size()):
 		var t: Vector2 = TABLES[i]
-		_blit_base(img, Art.make_chair(), t + SEAT_OFFSET + Vector2(0.0, 1.0))
+		_blit_base(img, Art.make_chair(), t + SEAT_OFFSET)
 		_blit_base(img, Art.make_table(), t)
-		_blit_base(img, Art.make_stool(), t + Vector2(0.0, 2.0))
 
 	for c in [0, 4, 8]:
 		_blit_base(img, Art.make_candle(), TABLES[c] + Vector2(0.0, -6.0))
