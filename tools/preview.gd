@@ -37,6 +37,12 @@ func _initialize() -> void:
 	_save(kitchen, "res://preview_kitchen.png")
 	_save(_twice(kitchen), "res://preview_kitchen_2x.png")
 
+	var village: Image = _compose_village()
+	_draw_hud_on(village, "18:05", 2, 14, 0.62)
+	_prompt(village, "E    BUY THE THYME, 3 COINS")
+	_save(village, "res://preview_village.png")
+	_save(_twice(village), "res://preview_village_2x.png")
+
 	print("wrote the preview images")
 	quit()
 
@@ -100,6 +106,22 @@ func _compose_kitchen() -> Image:
 	_blit_center(img, Art.bubbles()[1], Vector2(253.0, 12.0))
 	# the innkeeper, thinking about what to cook
 	_blit_char(img, "player", 1, 0, Vector2(200.0, 104.0))
+	_tint(img, Color(0.85, 0.85, 0.89, 1.0))
+	return img
+
+
+func _compose_village() -> Image:
+	var img: Image = Art.village_image().duplicate()
+	var spots: Array = [
+		Vector2(190.0, 92.0), Vector2(214.0, 92.0), Vector2(238.0, 92.0),
+		Vector2(262.0, 92.0), Vector2(286.0, 92.0),
+	]
+	for i in range(spots.size()):
+		_blit_base(img, Art.make_basket(Recipes.ingredient_col(i)), spots[i])
+	_blit_center(img, Art.make_car(), Vector2(244.0, 140.0))
+	_blit_char(img, "hare", 3, 0, Vector2(120.0, 118.0))
+	_blit_char(img, "fox", 2, 0, Vector2(262.0, 132.0))
+	_blit_char(img, "player", 0, 0, Vector2(74.0, 112.0))
 	_tint(img, Color(0.85, 0.85, 0.89, 1.0))
 	return img
 

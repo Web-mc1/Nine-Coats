@@ -33,7 +33,7 @@ const HAND_EMPTY := 0
 const HAND_INGREDIENT := 1
 const HAND_DISH := 2
 
-enum Room { TAPROOM, KITCHEN }
+enum Room { TAPROOM, KITCHEN, VILLAGE }
 enum GState { AWAY, INBOUND, SITTING, EATING, TALKING, OUTBOUND, GONE }
 const STATE_NAMES: Array = ["away", "inbound", "sitting", "eating", "talking", "outbound", "gone"]
 
@@ -61,6 +61,16 @@ var JAR_SPOTS: Array = [
 ]
 var POT_SPOT := Vector2(253.0, 84.0)
 
+# the village outside: where you come out, the way back in, and the grocer's
+# baskets along the stall
+var VILLAGE_ENTRY := Vector2(74.0, 112.0)
+var INN_DOOR_OUT := Vector2(37.0, 100.0)
+var SHOP_SPOTS: Array = [
+	Vector2(190.0, 92.0), Vector2(214.0, 92.0), Vector2(238.0, 92.0),
+	Vector2(262.0, 92.0), Vector2(286.0, 92.0),
+]
+var SHOP_PRICES: Array = [3, 2, 2, 3, 4]
+
 var BOUNDS_MIN := Vector2(8.0, 60.0)
 var BOUNDS_MAX := Vector2(312.0, 150.0)
 
@@ -70,7 +80,7 @@ var save_path: String = "user://ninecoats_save.json"
 
 var night: int = 1
 var clock_min: int = START_MIN
-var coins: int = 0
+var coins: int = 12
 var served_total: int = 0
 var ledger_lines: Array = []
 
@@ -154,6 +164,8 @@ var bg: Sprite2D
 var tap_fx: Node2D
 var tap_root: Node2D
 var kit_root: Node2D
+var vil_fx: Node2D
+var vil_root: Node2D
 var bubble_layer: Node2D
 var fire_sprite: Sprite2D
 var dusk: CanvasModulate
@@ -203,6 +215,12 @@ var _dialogue_leaves: bool = false
 var _obstacles: Array = []
 var _obstacles_tap: Array = []
 var _obstacles_kit: Array = []
+var _obstacles_vil: Array = []
+var village_npcs: Array = []
+var car: Sprite2D
+var _car_x: float = -60.0
+var _car_driving: bool = false
+var _car_wait: float = 6.0
 var _table_bowls: Array = []
 var _tts_seen: bool = false
 var _tts_voices: Array = []
@@ -250,12 +268,22 @@ func _build_world() -> void:
 	kit_root.visible = false
 	world.add_child(kit_root)
 
+	vil_fx = Node2D.new()
+	vil_fx.visible = false
+	world.add_child(vil_fx)
+
+	vil_root = Node2D.new()
+	vil_root.y_sort_enabled = true
+	vil_root.visible = false
+	world.add_child(vil_root)
+
 	bubble_layer = Node2D.new()
 	bubble_layer.z_index = 5
 	world.add_child(bubble_layer)
 
 	_build_taproom()
 	_build_kitchen()
+	_build_village()
 
 	player = _make_actor("player", player_pos, tap_root)
 
@@ -350,6 +378,134 @@ func _build_kitchen() -> void:
 	world.add_child(pot_bubbles)
 
 
+func _build_village() -> void:
+	# the fronts along the street, which you cannot walk through
+	_obstacles_vil.append(Rect2(0.0, 12.0, 96.0, 92.0))
+	_obstacles_vil.append(Rect2(104.0, 20.0, 56.0, 84.0))
+	_obstacles_vil.append(Rect2(168.0, 16.0, 144.0, 92.0))
+
+	# baskets of things for sale along the grocer's stall
+	for i in range(SHOP_SPOTS.size()):
+		var b: Sprite2D = _add_prop(Art.make_basket(Recipes.ingredient_col(i)), SHOP_SPOTS[i], vil_root)
+		b.z_index = 1
+
+	# a car, off the end of the street until it drives past
+	car = Sprite2D.new()
+	car.texture = Art.make_car()
+	car.centered = true
+	car.position = Vector2(-60.0, 142.0)
+	car.visible = false
+	car.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	vil_root.add_child(car)
+
+	# two villagers walking the street
+	var kinds: Array = ["hare", "fox"]
+	for i in range(kinds.size()):
+		var a: Sprite2D = _make_actor(str(kinds[i]), Vector2(70.0 + float(i) * 140.0, 118.0 + float(i) * 14.0), vil_root)
+		village_npcs.append({
+			"node": a,
+			"x0": 24.0,
+			"x1": 300.0,
+			"dir": 1 if i == 0 else -1,
+			"speed": 16.0 + float(i) * 5.0,
+		})
+
+	# the street lamp, as a glow on the snow
+	var g: Sprite2D = Sprite2D.new()
+	g.texture = Art.make_glow()
+	g.position = Vector2(101.0, 96.0)
+	g.scale = Vector2(1.3, 1.3)
+	g.modulate = Color(1.0, 0.86, 0.62, 0.26)
+	var mat: CanvasItemMaterial = CanvasItemMaterial.new()
+	mat.blend_mode = CanvasItemMaterial.BLEND_MODE_ADD
+	g.material = mat
+	g.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	g.z_index = 4
+	vil_fx.add_child(g)
+
+
+func _update_village(delta: float) -> void:
+	if room != Room.VILLAGE:
+		return
+	for npc in village_npcs:
+		var a: Sprite2D = npc["node"]
+		if a == null or not is_instance_valid(a):
+			continue
+		var dir: int = int(npc["dir"])
+		a.position.x = a.position.x + float(dir) * float(npc["speed"]) * delta
+		if a.position.x < float(npc["x0"]):
+			a.position.x = float(npc["x0"])
+			npc["dir"] = 1
+			dir = 1
+		elif a.position.x > float(npc["x1"]):
+			a.position.x = float(npc["x1"])
+			npc["dir"] = -1
+			dir = -1
+		_face_actor(a, 3 if dir > 0 else 2, int(_anim_t * 7.0) % 4)
+	if car == null or not is_instance_valid(car):
+		return
+	if not _car_driving:
+		_car_wait = _car_wait - delta
+		if _car_wait <= 0.0:
+			_car_driving = true
+			_car_x = -40.0
+		return
+	car.visible = true
+	_car_x = _car_x + 54.0 * delta
+	car.position = Vector2(_car_x, 142.0)
+	if _car_x > 372.0:
+		_car_driving = false
+		_car_wait = 14.0
+		car.visible = false
+
+
+func _near_basket() -> int:
+	for i in range(SHOP_SPOTS.size()):
+		if _near(SHOP_SPOTS[i] + Vector2(0.0, 6.0), 26.0):
+			return i
+	return -1
+
+
+func _update_village_prompt() -> void:
+	if _near(INN_DOOR_OUT + Vector2(0.0, 12.0), 24.0):
+		prompt_text.set_text("E    BACK INSIDE")
+		return
+	var i: int = _near_basket()
+	if i >= 0:
+		var price: int = int(SHOP_PRICES[i])
+		if hand_kind != HAND_EMPTY:
+			prompt_text.set_text("YOUR HANDS ARE FULL")
+		elif coins < price:
+			prompt_text.set_text("%s IS %d COINS. NOT ENOUGH" % [Recipes.ingredient_name(i), price])
+		else:
+			prompt_text.set_text("E    BUY THE %s, %d COINS" % [Recipes.ingredient_name(i), price])
+		return
+	prompt_text.set_text("")
+
+
+func _interact_village() -> void:
+	if _near(INN_DOOR_OUT + Vector2(0.0, 12.0), 24.0):
+		player_pos = Vector2(285.0, 80.0)
+		_set_room(Room.TAPROOM)
+		_toast("IN, OUT OF THE SNOW")
+		return
+	var i: int = _near_basket()
+	if i < 0:
+		return
+	if hand_kind != HAND_EMPTY:
+		_toast("YOUR HANDS ARE FULL")
+		return
+	if coins < int(SHOP_PRICES[i]):
+		_toast("NOT ENOUGH IN THE TIN")
+		return
+	coins = coins - int(SHOP_PRICES[i])
+	hand_kind = HAND_INGREDIENT
+	hand_id = i
+	_play_ping()
+	_toast("THE %s, AND YOUR CHANGE" % Recipes.ingredient_name(i))
+	_update_hand_icon()
+
+
 func _add_prop(tex: Texture2D, pos: Vector2, parent: Node) -> Sprite2D:
 	var s: Sprite2D = Sprite2D.new()
 	s.texture = tex
@@ -390,20 +546,29 @@ func _sit_actor(s: Sprite2D, frame: int) -> void:
 func _set_room(r: int) -> void:
 	room = r
 	var tap: bool = r == Room.TAPROOM
-	bg.texture = Art.make_room() if tap else Art.make_kitchen()
+	var kit: bool = r == Room.KITCHEN
+	var out: bool = r == Room.VILLAGE
+	bg.texture = Art.make_room() if tap else (Art.make_kitchen() if kit else Art.make_village())
 	tap_root.visible = tap
-	kit_root.visible = not tap
+	kit_root.visible = kit
+	vil_root.visible = out
 	tap_fx.visible = tap
+	vil_fx.visible = out
 	bubble_layer.visible = tap
-	_obstacles = _obstacles_tap if tap else _obstacles_kit
+	if tap:
+		_obstacles = _obstacles_tap
+	elif kit:
+		_obstacles = _obstacles_kit
+	else:
+		_obstacles = _obstacles_vil
 	if is_instance_valid(player):
-		var target: Node = tap_root if tap else kit_root
+		var target: Node = tap_root if tap else (kit_root if kit else vil_root)
 		var parent: Node = player.get_parent()
 		if parent != null and parent != target:
 			parent.remove_child(player)
 		if player.get_parent() == null:
 			target.add_child(player)
-	if tap and is_instance_valid(pot_bubbles):
+	if not kit and is_instance_valid(pot_bubbles):
 		pot_bubbles.visible = false
 	_update_hand_icon()
 
@@ -745,6 +910,7 @@ func tick(delta: float) -> void:
 		toast_t = maxf(0.0, toast_t - delta)
 
 	_update_guests(delta)
+	_update_village(delta)
 	_update_dusk()
 	_update_hud()
 
@@ -796,12 +962,20 @@ func _update_prompt() -> void:
 		prompt_text.set_text("")
 		return
 
+	if room == Room.VILLAGE:
+		_update_village_prompt()
+		return
+
 	if room == Room.KITCHEN:
 		_update_kitchen_prompt()
 		return
 
 	if _near(PASSAGE_TAP, 22.0):
 		prompt_text.set_text("E    THROUGH TO THE KITCHEN")
+		return
+
+	if _near(door_pos + Vector2(0.0, 16.0), 24.0):
+		prompt_text.set_text("E    OUT INTO THE SNOW")
 		return
 
 	var g: Dictionary = _nearest_guest()
@@ -1211,6 +1385,10 @@ func interact() -> void:
 		_advance_dialogue()
 		return
 
+	if room == Room.VILLAGE:
+		_interact_village()
+		return
+
 	if room == Room.KITCHEN:
 		_interact_kitchen()
 		return
@@ -1219,6 +1397,12 @@ func interact() -> void:
 		player_pos = Vector2(280.0, 92.0)
 		_set_room(Room.KITCHEN)
 		_toast("THE KITCHEN, WARM AND CLATTERING")
+		return
+
+	if _near(door_pos + Vector2(0.0, 16.0), 24.0):
+		player_pos = VILLAGE_ENTRY
+		_set_room(Room.VILLAGE)
+		_toast("OUT INTO THE SNOW")
 		return
 
 	var g: Dictionary = _nearest_guest()

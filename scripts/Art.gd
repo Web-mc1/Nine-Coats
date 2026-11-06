@@ -77,6 +77,8 @@ static var _room_img: Image = null
 static var _kitchen_tex: Texture2D = null
 static var _kitchen_img: Image = null
 static var _bubble_cache: Array = []
+static var _village_img: Image = null
+static var _village_tex: Texture2D = null
 static var _char_cache: Dictionary = {}
 static var _font_tex: Texture2D = null
 static var _glyph_index: Dictionary = {}
@@ -817,6 +819,22 @@ static func _char_spec(kind: String) -> Dictionary:
 				"body_d": Color8(84, 102, 80),
 				"accent": PINK,
 			}
+		"hare":
+			return {
+				"fur": Color8(178, 168, 158),
+				"fur_d": Color8(128, 120, 116),
+				"body": Color8(92, 106, 122),
+				"body_d": Color8(66, 78, 94),
+				"accent": PINK,
+			}
+		"fox":
+			return {
+				"fur": Color8(196, 116, 66),
+				"fur_d": Color8(148, 82, 48),
+				"body": Color8(120, 96, 82),
+				"body_d": Color8(88, 68, 60),
+				"accent": CREAM,
+			}
 		_:
 			return {
 				"fur": Color8(228, 150, 74),
@@ -837,7 +855,6 @@ static func make_char(kind: String, dir: int, frame: int, seated: bool = false) 
 	var img: Image = Image.create(12, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
 	var f: int = frame % 4
-	var step: int = f % 2
 	var side: bool = dir == 2 or dir == 3
 	var eat: bool = seated and frame >= 2
 
@@ -845,32 +862,40 @@ static func make_char(kind: String, dir: int, frame: int, seated: bool = false) 
 	for x in range(2, 10):
 		_mix(img, x, 15, INK, 0.30)
 
-	# legs
+	# legs: head 1-7, body 8-12, so there are three rows left for a step
 	if seated:
-		# knees together under the table, shins tucked back, a lap
-		_rect(img, 2, 13, 8, 2, body_d)
-		_rect(img, 3, 15, 6, 1, fur_d)
-		if not side:
-			_px(img, 2, 15, fur_d)
-			_px(img, 9, 15, fur_d)
-	elif side:
-		_rect(img, 4, 13 + step, 2, 3 - step, fur_d)
-		_rect(img, 7, 13 + (1 - step), 2, 3 - (1 - step), fur_d)
+		_rect(img, 2, 12, 8, 2, body)
+		_rect(img, 3, 14, 6, 2, body_d)
+		_rect(img, 3, 15, 2, 1, fur_d)
+		_rect(img, 7, 15, 2, 1, fur_d)
 	else:
-		_rect(img, 3, 13 + step, 2, 3 - step, fur_d)
-		_rect(img, 7, 13 + (1 - step), 2, 3 - (1 - step), fur_d)
+		var lift_l: int = 1 if f == 0 else 0
+		var lift_r: int = 1 if f == 2 else 0
+		if side:
+			_rect(img, 3, 13 - lift_l, 3, 3, fur_d)
+			_rect(img, 7, 13 - lift_r, 3, 3, fur_d)
+			_rect(img, 2, 15 - lift_l, 5, 1, fur_d.darkened(0.28))
+			_rect(img, 7, 15 - lift_r, 5, 1, fur_d.darkened(0.28))
+		else:
+			_rect(img, 3, 13 - lift_l, 2, 3, fur_d)
+			_rect(img, 7, 13 - lift_r, 2, 3, fur_d)
+			_rect(img, 2, 15 - lift_l, 3, 1, fur_d.darkened(0.28))
+			_rect(img, 8, 15 - lift_r, 3, 1, fur_d.darkened(0.28))
 
 	# body / clothing
-	_rect(img, 2, 8, 8, 7, body)
-	_rect(img, 2, 13, 8, 2, body_d)
+	_rect(img, 2, 8, 8, 5, body)
+	_rect(img, 2, 11, 8, 1, body_d)
 	if kind == "player":
-		_rect(img, 4, 10, 4, 5, accent)
-		_px(img, 5, 9, accent)
+		_rect(img, 4, 9, 4, 3, accent)
+		_px(img, 5, 8, accent)
+	elif kind == "fox":
+		_rect(img, 4, 9, 4, 3, accent)
+		_px(img, 5, 10, fur_d)
+
 	# arms
 	if side:
 		_rect(img, 6, 9, 3, 4, body_d)
 	elif seated:
-		# elbows on the table
 		_rect(img, 1, 9, 2, 3, body)
 		_rect(img, 9, 9, 2, 3, body)
 		_px(img, 1, 11, fur)
@@ -878,8 +903,8 @@ static func make_char(kind: String, dir: int, frame: int, seated: bool = false) 
 	else:
 		_rect(img, 1, 9, 2, 4, body)
 		_rect(img, 9, 9, 2, 4, body)
-		_px(img, 1, 13, fur)
-		_px(img, 10, 13, fur)
+		_px(img, 1, 12, fur)
+		_px(img, 10, 12, fur)
 
 	if eat:
 		# a spoon making its way up to the mouth
@@ -893,12 +918,10 @@ static func make_char(kind: String, dir: int, frame: int, seated: bool = false) 
 	_rect(img, 3, 1, 6, 2, fur.lightened(0.08))
 
 	if kind == "badger":
-		# the white stripe down the middle of the face
 		_vline(img, 5, 1, 7, accent)
 		if side:
 			_vline(img, 6, 1, 7, accent)
 	elif kind == "heron":
-		# long beak, and a crest feather
 		if side:
 			_rect(img, 8, 4, 4, 2, accent)
 			_px(img, 11, 5, accent.darkened(0.2))
@@ -906,44 +929,62 @@ static func make_char(kind: String, dir: int, frame: int, seated: bool = false) 
 			_rect(img, 5, 6, 2, 3, accent)
 		_px(img, 4, 0, fur_d)
 	elif kind == "mole":
-		# small eyes, pink snout, no real neck
 		if side:
 			_rect(img, 8, 5, 2, 1, accent)
 		else:
 			_rect(img, 5, 6, 2, 1, accent)
 		_hline(img, 3, 7, 6, fur_d)
+	elif kind == "hare":
+		# long ears, straight up
+		_rect(img, 4, -1, 1, 4, fur)
+		_rect(img, 7, -1, 1, 4, fur)
+		_px(img, 4, -1, fur_d)
+		_px(img, 7, -1, fur_d)
+		if not side:
+			_rect(img, 5, 6, 2, 1, accent)
+	elif kind == "fox":
+		# a pointed muzzle
+		if side:
+			_rect(img, 8, 5, 3, 2, fur)
+			_px(img, 11, 5, INK)
+		else:
+			_rect(img, 5, 5, 2, 2, fur.lightened(0.15))
+			_px(img, 5, 6, INK)
+		_px(img, 3, 0, fur_d)
+		_px(img, 8, 0, fur_d)
 
 	if dir == 0:
-		# facing us
 		_px(img, 4, 4, INK)
 		_px(img, 7, 4, INK)
 		_px(img, 4, 3, CREAM)
 		_px(img, 7, 3, CREAM)
 		_rect(img, 5, 6, 2, 1, fur_d)
-		# ears
-		_px(img, 3, 0, fur)
-		_px(img, 8, 0, fur)
-		_px(img, 3, 1, fur_d)
-		_px(img, 8, 1, fur_d)
+		if kind != "hare":
+			_px(img, 3, 0, fur)
+			_px(img, 8, 0, fur)
+			_px(img, 3, 1, fur_d)
+			_px(img, 8, 1, fur_d)
 	elif dir == 1:
-		# seen from behind
 		_hline(img, 3, 1, 6, fur_d)
-		_px(img, 3, 0, fur)
-		_px(img, 8, 0, fur)
+		if kind != "hare":
+			_px(img, 3, 0, fur)
+			_px(img, 8, 0, fur)
 		_rect(img, 5, 5, 2, 3, fur_d)
 	elif side:
-		# facing left; flipped after drawing
 		_px(img, 4, 4, INK)
 		_px(img, 3, 4, CREAM)
 		_rect(img, 2, 6, 3, 1, fur_d)
-		_px(img, 3, 0, fur)
-		_px(img, 4, 0, fur)
-		_px(img, 3, 1, fur_d)
-		# a tail for the innkeeper
+		if kind != "hare":
+			_px(img, 3, 0, fur)
+			_px(img, 4, 0, fur)
+			_px(img, 3, 1, fur_d)
 		if kind == "player":
 			_rect(img, 9, 10, 2, 3, fur)
 			_rect(img, 10, 8, 2, 3, fur)
 			_px(img, 11, 8, accent)
+		elif kind == "fox":
+			_rect(img, 9, 9, 3, 3, fur)
+			_px(img, 11, 8, CREAM)
 		else:
 			_rect(img, 9, 11, 1, 3, body_d)
 
@@ -1092,6 +1133,7 @@ static func kitchen_image() -> Image:
 	_draw_kitchen_pans(img)
 	_draw_kitchen_prep(img)
 	_draw_kitchen_stove(img)
+	_draw_kitchen_signs(img)
 	_draw_passage(img, W - 28, false, 28)
 	_kitchen_grade(img)
 	_kitchen_img = img
@@ -1273,6 +1315,304 @@ static func _kitchen_grade(img: Image) -> void:
 			var d: float = sqrt(dx * dx + dy * dy)
 			if d > 0.78:
 				_mix(img, x, y, INK, min(0.40, (d - 0.78) * 0.85))
+
+
+# ------------------------------------------------------------ the village --
+
+static func village_image() -> Image:
+	if _village_img != null:
+		return _village_img
+	_reset(9091)
+	var img: Image = Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(INK)
+	_draw_sky(img)
+	_draw_ridges(img)
+	_draw_snow(img)
+	_draw_inn_front(img)
+	_draw_shut_house(img)
+	_draw_shop_front(img)
+	_draw_street_lamp(img)
+	_village_grade(img)
+	_village_img = img
+	return _village_img
+
+
+static func make_village() -> Texture2D:
+	if _village_tex == null:
+		_village_tex = ImageTexture.create_from_image(village_image())
+	return _village_tex
+
+
+static func _draw_text(img: Image, s: String, x: int, y: int, col: Color) -> void:
+	var cx: int = x
+	for i in range(s.length()):
+		var ch: String = s[i].to_upper()
+		if GLYPHS.has(ch):
+			var lines: PackedStringArray = String(GLYPHS[ch]).split("/")
+			for yy in range(min(7, lines.size())):
+				var bits: String = lines[yy]
+				for xx in range(min(5, bits.length())):
+					if bits[xx] == "1":
+						_px(img, cx + xx, y + yy, col)
+		cx += 6
+
+
+static func _sign(img: Image, x: int, y: int, w: int, h: int, lines: Array) -> void:
+	_rect(img, x, y, w, h, WOOD)
+	_frame(img, x, y, w, h, WOOD_D)
+	_hline(img, x + 1, y + 1, w - 2, WOOD_L)
+	_rect(img, x - 1, y - 2, 2, 3, IRON)
+	for i in range(lines.size()):
+		var s: String = str(lines[i])
+		var tw: int = s.length() * 6 - 1
+		_draw_text(img, s, x + (w - tw) / 2, y + 3 + i * 8, INK.darkened(0.3))
+
+
+static func _draw_sky(img: Image) -> void:
+	for y in range(0, 96):
+		var t: float = float(y) / 96.0
+		var col: Color = Color8(30, 34, 54).lerp(Color8(58, 66, 92), t)
+		for x in range(0, W):
+			_px(img, x, y, col)
+	# a low moon over the pass
+	_ellipse(img, 272.0, 24.0, 14.0, 14.0, FOG, 0.18)
+	_ellipse(img, 272.0, 24.0, 9.0, 9.0, CREAM, 0.42)
+	# stars, and snow coming down
+	for i in range(46):
+		_px(img, 2 + _rnd(W - 4), 2 + _rnd(64), FOG.lerp(CREAM, 0.5))
+	for i in range(120):
+		var sx: int = _rnd(W)
+		var sy: int = _rnd(160)
+		_px(img, sx, sy, FOG.lerp(CREAM, 0.55))
+		_px(img, sx, sy + 1, FOG)
+
+
+static func _draw_ridges(img: Image) -> void:
+	var base: int = 96
+	for x in range(0, W):
+		var h: int = 20 + int(9.0 * sin(float(x) * 0.028)) + int(5.0 * sin(float(x) * 0.09 + 1.1))
+		for y in range(base - h, base):
+			var col: Color = SLATE_D.darkened(0.36)
+			if (x + y) % 11 == 0:
+				col = SLATE_D.darkened(0.28)
+			_px(img, x, y, col)
+		_px(img, x, base - h, FOG.lerp(CREAM, 0.25))
+		_px(img, x, base - h + 1, FOG.darkened(0.2))
+
+
+static func _draw_snow(img: Image) -> void:
+	for y in range(92, H):
+		var t: float = float(y - 92) / float(H - 92)
+		var col: Color = FOG.darkened(0.34).lerp(SLATE.darkened(0.30), t * 0.55)
+		for x in range(0, W):
+			_px(img, x, y, col)
+	# drifts along the walls
+	for i in range(16):
+		_ellipse(img, float(_rnd(W)), 96.0 + float(_rnd(16)), 18.0, 5.0, FOG.darkened(0.16), 0.5)
+	# the road through the village
+	_rect(img, 0, 112, W, 34, SLATE_D.darkened(0.30))
+	_hline(img, 0, 112, W, SLATE.darkened(0.34))
+	_hline(img, 0, 145, W, SLATE.darkened(0.34))
+	for i in range(2):
+		var ty: int = 124 + i * 10
+		_hline(img, 0, ty, W, SLATE.darkened(0.46))
+		_hline(img, 0, ty + 1, W, SLATE_D.darkened(0.16))
+	_rect(img, 0, 108, W, 4, FOG.darkened(0.22))
+	_rect(img, 0, 146, W, 4, FOG.darkened(0.22))
+	for i in range(70):
+		_px(img, _rnd(W), 116 + _rnd(28), SLATE.darkened(0.4))
+
+
+static func _draw_inn_front(img: Image) -> void:
+	_rect(img, 0, 14, 96, 94, STONE_D)
+	_rect(img, 0, 14, 96, 5, FOG.darkened(0.18))
+	_rect(img, 0, 19, 96, 3, WOOD_D)
+	for yy in range(22, 108):
+		for xx in range(0, 96):
+			if xx % 12 == 0 or (yy - 22) % 8 == 0:
+				_px(img, xx, yy, MORTAR)
+	for wx in [8, 68]:
+		_rect(img, wx, 40, 24, 22, WOOD_D)
+		_rect(img, wx + 2, 42, 20, 18, AMBER_D)
+		_rect(img, wx + 3, 43, 18, 16, AMBER)
+		_vline(img, wx + 11, 42, 18, WOOD_D)
+		_hline(img, wx + 2, 50, 20, WOOD_D)
+		_ellipse(img, float(wx + 12), 106.0, 24.0, 8.0, AMBER_D, 0.16)
+	_rect(img, 32, 64, 30, 40, WOOD_D)
+	_rect(img, 34, 66, 26, 38, WOOD)
+	_vline(img, 47, 66, 38, WOOD_D)
+	_rect(img, 54, 84, 2, 3, AMBER_D)
+	_hline(img, 32, 103, 30, AMBER)
+	_rect(img, 28, 104, 38, 4, FOG.darkened(0.3))
+	_sign(img, 34, 46, 32, 16, ["NINE", "COATS"])
+
+
+static func _draw_shut_house(img: Image) -> void:
+	_rect(img, 104, 22, 56, 86, STONE_D)
+	_rect(img, 104, 22, 56, 5, FOG.darkened(0.2))
+	for yy in range(27, 108):
+		for xx in range(104, 160):
+			if (xx - 104) % 10 == 0 or (yy - 27) % 8 == 0:
+				_px(img, xx, yy, MORTAR)
+	_rect(img, 112, 44, 40, 26, WOOD_D)
+	_rect(img, 114, 46, 36, 22, INK)
+	for i in range(2):
+		_rect(img, 110, 51 + i * 9, 44, 3, WOOD)
+	_rect(img, 122, 78, 20, 30, WOOD_D)
+	_rect(img, 124, 80, 16, 28, WOOD_D.darkened(0.12))
+	_px(img, 137, 94, STONE_L)
+	_rect(img, 118, 104, 28, 4, FOG.darkened(0.25))
+
+
+static func _draw_shop_front(img: Image) -> void:
+	_rect(img, 168, 16, 144, 92, STONE_D)
+	_rect(img, 168, 16, 144, 5, FOG.darkened(0.2))
+	for yy in range(21, 108):
+		for xx in range(168, 312):
+			if (xx - 168) % 12 == 0 or (yy - 21) % 8 == 0:
+				_px(img, xx, yy, MORTAR)
+	for wx in [176, 236]:
+		_rect(img, wx, 44, 52, 28, WOOD_D)
+		_rect(img, wx + 2, 46, 48, 24, AMBER_D)
+		_rect(img, wx + 3, 47, 46, 22, AMBER)
+		_vline(img, wx + 25, 46, 24, WOOD_D)
+		_rect(img, wx + 6, 60, 10, 9, RUST_D)
+		_rect(img, wx + 8, 57, 8, 3, RUST)
+		_rect(img, wx + 30, 62, 12, 7, WOOD)
+		_ellipse(img, float(wx + 26), 108.0, 28.0, 8.0, AMBER_D, 0.15)
+	_rect(img, 292, 52, 22, 56, WOOD_D)
+	_rect(img, 294, 54, 18, 54, WOOD)
+	_rect(img, 306, 78, 2, 3, AMBER_D)
+	_sign(img, 196, 22, 78, 14, ["GROCER"])
+	for i in range(18):
+		var ax: int = 168 + i * 8
+		_rect(img, ax, 34, 8, 7, RUST if i % 2 == 0 else CREAM.lerp(RUST, 0.75))
+	_hline(img, 168, 41, 144, RUST_D)
+	# the stall, where you buy things
+	_rect(img, 176, 92, 114, 12, WOOD)
+	_rect(img, 176, 92, 114, 2, WOOD_L)
+	_rect(img, 176, 101, 114, 3, WOOD_D)
+	for i in range(8):
+		_vline(img, 180 + i * 15, 94, 8, WOOD_D)
+	_rect(img, 172, 104, 122, 3, FOG.darkened(0.25))
+
+
+static func _draw_street_lamp(img: Image) -> void:
+	var x: int = 100
+	_rect(img, x, 96, 3, 54, IRON)
+	_rect(img, x - 1, 146, 5, 3, IRON.darkened(0.2))
+	_rect(img, x - 5, 88, 13, 3, IRON)
+	_rect(img, x - 4, 91, 11, 8, WOOD_D)
+	_rect(img, x - 3, 92, 9, 6, AMBER)
+	_rect(img, x - 2, 93, 7, 4, AMBER_L)
+	_px(img, x, 94, CREAM)
+	_ellipse(img, float(x), 104.0, 20.0, 10.0, AMBER, 0.16)
+
+
+static func _village_grade(img: Image) -> void:
+	var lights: Array = [
+		[20, 50, 34.0, AMBER_D, 0.22],
+		[80, 50, 34.0, AMBER_D, 0.22],
+		[48, 98, 26.0, AMBER_D, 0.20],
+		[200, 56, 40.0, AMBER_D, 0.20],
+		[262, 56, 40.0, AMBER_D, 0.20],
+		[100, 94, 30.0, AMBER, 0.26],
+	]
+	for e in lights:
+		var lx: int = e[0]
+		var ly: int = e[1]
+		var r: float = e[2]
+		var col: Color = e[3]
+		var st: float = e[4]
+		for y in range(max(0, ly - int(r)), min(H, ly + int(r))):
+			for x in range(max(0, lx - int(r)), min(W, lx + int(r))):
+				var d: float = Vector2(float(x - lx), float(y - ly)).length()
+				if d < r:
+					var t: float = 1.0 - d / r
+					_mix(img, x, y, col, t * t * st)
+	for y in range(H):
+		for x in range(W):
+			var dx: float = (float(x) - W / 2.0) / (W * 0.60)
+			var dy: float = (float(y) - H / 2.0) / (H * 0.60)
+			var d2: float = sqrt(dx * dx + dy * dy)
+			if d2 > 0.72:
+				_mix(img, x, y, INK, min(0.42, (d2 - 0.72) * 0.9))
+
+
+static func _draw_kitchen_signs(img: Image) -> void:
+	# words, so the kitchen reads at a glance
+	_draw_text(img, "PANTRY", 130, 24, CREAM)
+	_hline(img, 126, 33, 44, WOOD_D)
+	_draw_text(img, "POT", 243, 6, CREAM)
+	_draw_text(img, "ROOM", 291, 20, CREAM)
+	# a little card under each jar, with what is in it
+	for i in range(5):
+		var x: int = 102 + i * 24
+		_rect(img, x, 50, 16, 10, CREAM.darkened(0.05))
+		_frame(img, x, 50, 16, 10, WOOD_D)
+		_draw_ingredient_mark(img, x + 4, 52, i)
+
+
+static func _draw_ingredient_mark(img: Image, x: int, y: int, id: int) -> void:
+	match id:
+		0:
+			_rect(img, x, y + 2, 8, 3, Color8(168, 126, 104))
+			_rect(img, x + 1, y + 1, 6, 1, Color8(190, 150, 126))
+			_rect(img, x + 3, y + 5, 2, 3, CREAM.darkened(0.1))
+		1:
+			_ellipse(img, float(x + 4), float(y + 4), 4.0, 3.0, Color8(200, 176, 128), 1.0)
+			_px(img, x + 2, y + 3, CREAM.darkened(0.2))
+		2:
+			_ellipse(img, float(x + 4), float(y + 4), 3.5, 3.5, Color8(206, 176, 196), 1.0)
+			_vline(img, x + 4, y, 2, SAGE_D)
+		3:
+			_vline(img, x + 4, y + 1, 6, SAGE_D)
+			for i in range(3):
+				_px(img, x + 2 + i, y + 2 + i, SAGE)
+				_px(img, x + 6 - i, y + 2 + i, SAGE)
+		4:
+			for i in range(6):
+				_hline(img, x + 1 + i, y + 1 + i, 7 - i, Color8(242, 204, 110))
+			_px(img, x + 3, y + 3, AMBER_D)
+			_px(img, x + 5, y + 2, AMBER_D)
+
+
+static func make_basket(col: Color) -> Texture2D:
+	var img: Image = Image.create(16, 12, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 3, 2, 10, 5, col)
+	_rect(img, 4, 1, 8, 2, col.lightened(0.18))
+	_px(img, 6, 1, col.darkened(0.2))
+	_px(img, 10, 2, col.darkened(0.2))
+	_rect(img, 2, 6, 12, 5, WOOD)
+	_rect(img, 2, 6, 12, 1, WOOD_L)
+	for i in range(3):
+		_hline(img, 3, 8 + i, 10, WOOD_D)
+	_px(img, 2, 11, WOOD_D)
+	_px(img, 13, 11, WOOD_D)
+	_outline(img, INK)
+	return ImageTexture.create_from_image(img)
+
+
+static func make_car() -> Texture2D:
+	var img: Image = Image.create(34, 15, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for x in range(2, 32):
+		_mix(img, x, 14, INK, 0.28)
+	_ellipse(img, 9.0, 12.0, 3.5, 2.5, INK, 1.0)
+	_ellipse(img, 25.0, 12.0, 3.5, 2.5, INK, 1.0)
+	_ellipse(img, 9.0, 12.0, 1.5, 1.0, STONE_L, 0.7)
+	_ellipse(img, 25.0, 12.0, 1.5, 1.0, STONE_L, 0.7)
+	_rect(img, 1, 5, 32, 7, RUST_D)
+	_rect(img, 1, 5, 32, 2, RUST)
+	_rect(img, 7, 1, 15, 5, RUST_D)
+	_rect(img, 8, 2, 13, 3, GLASS_L)
+	_vline(img, 14, 2, 3, RUST_D)
+	_rect(img, 31, 7, 2, 2, AMBER_L)
+	_rect(img, 1, 7, 1, 2, CREAM)
+	_hline(img, 1, 11, 32, RUST_D.darkened(0.3))
+	_outline(img, INK)
+	return ImageTexture.create_from_image(img)
 
 
 # --------------------------------------------------------------- text ------

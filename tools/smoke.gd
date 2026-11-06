@@ -79,9 +79,11 @@ func _start() -> void:
 	# --- the pieces exist
 	_check("room is 320x180", Art.make_room().get_size() == Vector2(320.0, 180.0))
 	_check("kitchen is 320x180", Art.make_kitchen().get_size() == Vector2(320.0, 180.0))
+	_check("village is 320x180", Art.make_village().get_size() == Vector2(320.0, 180.0))
 	_check("character sprite is 12x16", Art.char_tex("player", 0, 0).get_image().get_size() == Vector2i(12, 16))
 	_check("a chair is 12x11", Art.make_chair().get_image().get_size() == Vector2i(12, 11))
 	_check("a seated sprite is 12x16", Art.sit_tex("badger", 0, 2).get_image().get_size() == Vector2i(12, 16))
+	_check("the feet move between walk frames", Art.char_tex("player", 0, 0).get_image().get_data() != Art.char_tex("player", 0, 2).get_image().get_data())
 	_check("music is synthesised", Audio.music().data.size() > 200000)
 	_check("music loops", Audio.music().loop_mode == AudioStreamWAV.LOOP_FORWARD)
 	_check("footsteps are synthesised", Audio.step().data.size() > 2000)
@@ -148,6 +150,30 @@ func _start() -> void:
 	_check("a pot was counted", main.dishes_cooked == 1)
 	main.interact()
 	_check("the dish is in hand", main.hand_kind == 2 and main.hand_id == Recipes.dish_for(0, 1))
+
+	# --- and the village outside the front door
+	var keep_kind: int = main.hand_kind
+	var keep_id: int = main.hand_id
+	main._set_room(2)
+	main.player_pos = main.VILLAGE_ENTRY
+	_check("the village floor is clear", main._free(main.player_pos))
+	var vreach: Dictionary = _flood(main)
+	_check("walks to the grocer's stall", _reachable(vreach, main.SHOP_SPOTS[0] + Vector2(0.0, 24.0)))
+	_check("walks to the last basket", _reachable(vreach, main.SHOP_SPOTS[4] + Vector2(0.0, 24.0)))
+	_check("walks to the inn door", _reachable(vreach, main.INN_DOOR_OUT + Vector2(0.0, 12.0)))
+	_check("there is a car", main.car != null)
+	_check("two villagers walk the street", main.village_npcs.size() == 2)
+	main.coins = 20
+	main.hand_kind = 0
+	main.hand_id = -1
+	main.player_pos = main.SHOP_SPOTS[1] + Vector2(0.0, 24.0)
+	main.interact()
+	_check("bought something from the grocer", main.hand_kind == 1 and main.hand_id == 1)
+	_check("and paid for it", main.coins == 20 - int(main.SHOP_PRICES[1]))
+	main.interact()
+	_check("cannot buy with full hands", main.coins == 20 - int(main.SHOP_PRICES[1]))
+	main.hand_kind = keep_kind
+	main.hand_id = keep_id
 
 	# --- a guest arrives, walks to a chair and sits on it
 	main._set_room(0)
