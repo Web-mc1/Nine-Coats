@@ -74,6 +74,9 @@ const IRON := Color8(52, 50, 62)
 static var _seed: int = 7717
 static var _room_tex: Texture2D = null
 static var _room_img: Image = null
+static var _kitchen_tex: Texture2D = null
+static var _kitchen_img: Image = null
+static var _bubble_cache: Array = []
 static var _char_cache: Dictionary = {}
 static var _font_tex: Texture2D = null
 static var _glyph_index: Dictionary = {}
@@ -175,6 +178,7 @@ static func room_image() -> Image:
 	_draw_rack(img)
 	_draw_herbs(img)
 	_draw_wall_art(img)
+	_draw_passage(img, 0, true)
 	_warm_grade(img)
 	_room_img = img
 	return _room_img
@@ -823,7 +827,7 @@ static func _char_spec(kind: String) -> Dictionary:
 			}
 
 
-static func make_char(kind: String, dir: int, frame: int) -> Texture2D:
+static func make_char(kind: String, dir: int, frame: int, seated: bool = false) -> Texture2D:
 	var spec: Dictionary = _char_spec(kind)
 	var fur: Color = spec["fur"]
 	var fur_d: Color = spec["fur_d"]
@@ -832,15 +836,24 @@ static func make_char(kind: String, dir: int, frame: int) -> Texture2D:
 	var accent: Color = spec["accent"]
 	var img: Image = Image.create(12, 16, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0, 0, 0, 0))
-	var step: int = frame % 2
+	var f: int = frame % 4
+	var step: int = f % 2
 	var side: bool = dir == 2 or dir == 3
+	var eat: bool = seated and frame >= 2
 
 	# a soft contact shadow so feet sit on the boards
 	for x in range(2, 10):
 		_mix(img, x, 15, INK, 0.30)
 
 	# legs
-	if side:
+	if seated:
+		# knees together under the table, shins tucked back, a lap
+		_rect(img, 2, 13, 8, 2, body_d)
+		_rect(img, 3, 15, 6, 1, fur_d)
+		if not side:
+			_px(img, 2, 15, fur_d)
+			_px(img, 9, 15, fur_d)
+	elif side:
 		_rect(img, 4, 13 + step, 2, 3 - step, fur_d)
 		_rect(img, 7, 13 + (1 - step), 2, 3 - (1 - step), fur_d)
 	else:
@@ -856,11 +869,24 @@ static func make_char(kind: String, dir: int, frame: int) -> Texture2D:
 	# arms
 	if side:
 		_rect(img, 6, 9, 3, 4, body_d)
+	elif seated:
+		# elbows on the table
+		_rect(img, 1, 9, 2, 3, body)
+		_rect(img, 9, 9, 2, 3, body)
+		_px(img, 1, 11, fur)
+		_px(img, 10, 11, fur)
 	else:
 		_rect(img, 1, 9, 2, 4, body)
 		_rect(img, 9, 9, 2, 4, body)
 		_px(img, 1, 13, fur)
 		_px(img, 10, 13, fur)
+
+	if eat:
+		# a spoon making its way up to the mouth
+		_rect(img, 9, 7, 1, 4, WOOD_L)
+		_px(img, 8, 6, CREAM)
+		_px(img, 9, 6, CREAM)
+		_px(img, 8, 5, CREAM.darkened(0.1))
 
 	# head
 	_rect(img, 3, 1, 6, 7, fur)
@@ -927,13 +953,18 @@ static func make_char(kind: String, dir: int, frame: int) -> Texture2D:
 	return ImageTexture.create_from_image(img)
 
 
-static func char_tex(kind: String, dir: int, frame: int) -> Texture2D:
-	var key: String = "%s_%d_%d" % [kind, dir, frame]
+static func char_tex(kind: String, dir: int, frame: int, seated: bool = false) -> Texture2D:
+	var key: String = "%s_%d_%d_%s" % [kind, dir, frame, str(seated)]
 	if _char_cache.has(key):
 		return _char_cache[key]
-	var tex: Texture2D = make_char(kind, dir, frame)
+	var tex: Texture2D = make_char(kind, dir, frame, seated)
 	_char_cache[key] = tex
 	return tex
+
+
+# Frames 0-1 are sitting still, 2-3 are eating.
+static func sit_tex(kind: String, dir: int, frame: int) -> Texture2D:
+	return char_tex(kind, dir, frame, true)
 
 
 static func make_panel(w: int, h: int, fill: Color, border: Color) -> Texture2D:
@@ -944,6 +975,304 @@ static func make_panel(w: int, h: int, fill: Color, border: Color) -> Texture2D:
 	_hline(img, 1, 1, w - 2, fill.lightened(0.10))
 	_hline(img, 1, h - 2, w - 2, fill.darkened(0.25))
 	return ImageTexture.create_from_image(img)
+
+
+# ------------------------------------------------------------ new pieces ---
+
+static func make_chair() -> Texture2D:
+	var img: Image = Image.create(12, 11, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for x in range(1, 11):
+		_mix(img, x, 10, INK, 0.26)
+	# back
+	_rect(img, 2, 0, 8, 5, WOOD)
+	_hline(img, 2, 0, 8, WOOD_L)
+	_vline(img, 3, 1, 4, WOOD_D)
+	_vline(img, 8, 1, 4, WOOD_D)
+	# seat
+	_rect(img, 1, 5, 10, 3, WOOD)
+	_hline(img, 1, 5, 10, WOOD_L)
+	_hline(img, 1, 7, 10, WOOD_D)
+	# legs
+	_rect(img, 2, 8, 2, 3, WOOD_D)
+	_rect(img, 8, 8, 2, 3, WOOD_D)
+	_outline(img, INK)
+	return ImageTexture.create_from_image(img)
+
+
+static func make_jar(col: Color) -> Texture2D:
+	var img: Image = Image.create(8, 10, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 1, 2, 6, 8, col)
+	_rect(img, 1, 2, 6, 1, col.lightened(0.28))
+	_hline(img, 2, 6, 4, col.darkened(0.22))
+	_rect(img, 0, 2, 1, 8, GLASS_L)
+	_rect(img, 7, 2, 1, 8, GLASS_L)
+	_rect(img, 0, 1, 8, 1, WOOD_D)
+	_rect(img, 1, 0, 6, 1, WOOD)
+	_frame(img, 0, 0, 8, 10, GLASS_L.darkened(0.45))
+	return ImageTexture.create_from_image(img)
+
+
+static func make_order_bubble(col: Color) -> Texture2D:
+	# a thought bubble with the dish they are hoping for in it
+	var img: Image = Image.create(15, 15, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 0, 0, 15, 11, CREAM)
+	_frame(img, 0, 0, 15, 11, WOOD_D)
+	_hline(img, 1, 1, 13, CREAM.lightened(0.2))
+	# a bowl holding the colour of the dish
+	_rect(img, 3, 4, 9, 3, col)
+	_rect(img, 3, 4, 9, 1, col.lightened(0.3))
+	_rect(img, 4, 7, 7, 2, CREAM.darkened(0.12))
+	_frame(img, 3, 4, 9, 5, WOOD_D)
+	# tail
+	_rect(img, 6, 11, 3, 2, CREAM)
+	_px(img, 6, 13, CREAM)
+	_px(img, 7, 14, CREAM)
+	_frame(img, 6, 11, 3, 1, WOOD_D)
+	return ImageTexture.create_from_image(img)
+
+
+static func make_plate(col: Color) -> Texture2D:
+	var img: Image = Image.create(11, 6, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	for x in range(0, 11):
+		_mix(img, x, 5, INK, 0.24)
+	_rect(img, 1, 1, 9, 3, CREAM)
+	_rect(img, 2, 1, 7, 2, col)
+	_px(img, 4, 0, AMBER_L)
+	_hline(img, 1, 3, 9, CREAM.darkened(0.15))
+	_outline(img, INK)
+	return ImageTexture.create_from_image(img)
+
+
+static func make_pot_fill(col: Color) -> Texture2D:
+	var img: Image = Image.create(22, 7, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	_rect(img, 1, 2, 20, 4, col)
+	_rect(img, 2, 2, 18, 1, col.lightened(0.22))
+	_hline(img, 3, 4, 6, col.darkened(0.18))
+	_px(img, 15, 5, col.darkened(0.14))
+	_frame(img, 1, 1, 20, 5, IRON.darkened(0.2))
+	return ImageTexture.create_from_image(img)
+
+
+static func bubbles() -> Array:
+	if _bubble_cache.size() > 0:
+		return _bubble_cache
+	for f in range(3):
+		var img: Image = Image.create(24, 12, false, Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		for i in range(4):
+			var bx: int = 3 + i * 5
+			var by: int = 8 - ((i + f) % 3) * 3
+			_px(img, bx, by, FOG)
+			_px(img, bx + 1, by, CREAM)
+			if i % 2 == 0:
+				_px(img, bx, by - 1, FOG)
+				_px(img, bx + 1, by - 1, FOG)
+		_bubble_cache.append(ImageTexture.create_from_image(img))
+	return _bubble_cache
+
+
+# ------------------------------------------------------------- the kitchen --
+
+static func kitchen_image() -> Image:
+	if _kitchen_img != null:
+		return _kitchen_img
+	_reset(3131)
+	var img: Image = Image.create(W, H, false, Image.FORMAT_RGBA8)
+	img.fill(INK)
+	_draw_wall(img)
+	_draw_floor(img)
+	_draw_beam(img)
+	_draw_kitchen_mat(img)
+	_draw_kitchen_shelf(img)
+	_draw_kitchen_pans(img)
+	_draw_kitchen_prep(img)
+	_draw_kitchen_stove(img)
+	_draw_passage(img, W - 28, false, 28)
+	_kitchen_grade(img)
+	_kitchen_img = img
+	return _kitchen_img
+
+
+static func make_kitchen() -> Texture2D:
+	if _kitchen_tex == null:
+		_kitchen_tex = ImageTexture.create_from_image(kitchen_image())
+	return _kitchen_tex
+
+
+static func _draw_passage(img: Image, x: int, opening_left: bool, w: int = 14) -> void:
+	# a low doorway through to the kitchen: dark, with warm light coming out
+	var top: int = WALL_H - 2
+	var h: int = 48
+	_rect(img, x, top, w, h, INK)
+	# the far wall of the passage, a step or two in
+	_rect(img, x + 2, top + 3, w - 4, h - 6, INK.darkened(0.4))
+	# stone frame on the room side
+	var fx: int = x + w - 1 if opening_left else x
+	_rect(img, fx, top - 3, 3, h + 3, STONE)
+	_hline(img, fx, top - 3, 3, STONE_L)
+	# a step
+	_rect(img, x + 1, top + h - 4, w - 2, 4, STONE_D)
+	_hline(img, x + 1, top + h - 4, w - 2, STONE)
+	# the light that leaks into this room
+	var lx: int = x + w if opening_left else x - 1
+	for i in range(10):
+		var sx: int = lx + i if opening_left else lx - i
+		for yy in range(top, top + h):
+			_mix(img, sx, yy, AMBER_D, 0.16 - i * 0.016)
+	# a curtain bunched at the side
+	if opening_left:
+		_rect(img, x + w - 4, top, 4, 26, RUST_D)
+	else:
+		_rect(img, x, top, 4, 26, RUST_D)
+
+
+static func _draw_kitchen_mat(img: Image) -> void:
+	# a rag mat where you stand to cook
+	_rect(img, 226, 96, 46, 14, RUST_D)
+	_rect(img, 228, 98, 42, 10, RUST)
+	_frame(img, 228, 98, 42, 10, RUST_D)
+	_hline(img, 232, 102, 34, RUST_D.darkened(0.1))
+
+
+static func _draw_kitchen_shelf(img: Image) -> void:
+	var x0: int = 96
+	var w: int = 110
+	# board and brackets
+	_rect(img, x0, 44, w, 5, WOOD)
+	_hline(img, x0, 44, w, WOOD_L)
+	_hline(img, x0, 48, w, WOOD_D)
+	for bx in [x0 + 10, x0 + w / 2, x0 + w - 12]:
+		_rect(img, bx, 49, 2, 6, WOOD_D)
+	# jars, in a row, waiting
+	var cols: Array = [Color8(168, 126, 104), Color8(214, 190, 140), Color8(206, 176, 196), Color8(126, 158, 106), Color8(242, 204, 110)]
+	for i in range(5):
+		_draw_jar_at(img, x0 + 14 + i * 24, 34, cols[i])
+	# a lower shelf with bowls and a crock
+	_rect(img, x0 + 20, 62, 60, 4, WOOD)
+	_hline(img, x0 + 20, 62, 60, WOOD_L)
+	for i in range(3):
+		_rect(img, x0 + 24 + i * 9, 59, 7, 3, CREAM)
+		_hline(img, x0 + 24 + i * 9, 59, 7, CREAM.lightened(0.2))
+	_rect(img, x0 + 58, 54, 14, 8, SLATE_D)
+	_rect(img, x0 + 58, 54, 14, 1, SLATE)
+
+
+static func _draw_jar_at(img: Image, x: int, y: int, col: Color) -> void:
+	_rect(img, x + 1, y + 2, 6, 8, col)
+	_rect(img, x + 1, y + 2, 6, 1, col.lightened(0.28))
+	_hline(img, x + 2, y + 6, 4, col.darkened(0.22))
+	_rect(img, x, y + 2, 1, 8, GLASS_L)
+	_rect(img, x + 7, y + 2, 1, 8, GLASS_L)
+	_rect(img, x, y + 1, 8, 1, WOOD_D)
+	_rect(img, x + 1, y, 6, 1, WOOD)
+	_frame(img, x, y, 8, 10, GLASS_L.darkened(0.45))
+
+
+static func _draw_kitchen_pans(img: Image) -> void:
+	# pans and a ladle hanging off the beam
+	_hline(img, 172, 18, 12, IRON)
+	for i in range(3):
+		var px: int = 176 + i * 5
+		_vline(img, px, 10, 8, IRON)
+		_rect(img, px - 3, 18, 7, 6, IRON)
+		_hline(img, px - 3, 18, 7, STONE_L.darkened(0.3))
+		_px(img, px, 24, IRON.darkened(0.3))
+	# a bundle of thyme drying
+	_vline(img, 196, 10, 5, WOOD_D)
+	for i in range(4):
+		_rect(img, 194 + i, 15 + i, 2, 4, SAGE_D)
+
+
+static func _draw_kitchen_prep(img: Image) -> void:
+	# a chopping table standing in the middle of the floor
+	var x: int = 126
+	var y: int = 126
+	for xx in range(2, 46):
+		_mix(img, x + xx, y, INK, 0.26)
+	_rect(img, x + 5, y - 8, 3, 8, WOOD_D)
+	_rect(img, x + 40, y - 8, 3, 8, WOOD_D)
+	_rect(img, x, y - 22, 48, 14, WOOD)
+	_rect(img, x, y - 22, 48, 2, WOOD_L)
+	_hline(img, x, y - 9, 48, WOOD_D)
+	# a board, a knife, and something being cut
+	_rect(img, x + 5, y - 18, 19, 6, WOOD_L)
+	_rect(img, x + 5, y - 18, 19, 1, CREAM.lerp(WOOD_L, 0.45))
+	_hline(img, x + 20, y - 20, 9, STONE_L)
+	_px(img, x + 29, y - 20, WOOD_D)
+	_rect(img, x + 9, y - 17, 4, 3, Color8(168, 126, 104))
+	_rect(img, x + 15, y - 17, 3, 2, Color8(206, 176, 196))
+	# a bowl of odds and ends
+	_rect(img, x + 31, y - 20, 9, 4, CREAM)
+	_rect(img, x + 32, y - 21, 7, 1, SAGE)
+	_hline(img, x + 31, y - 17, 9, CREAM.darkened(0.18))
+
+
+static func _draw_kitchen_stove(img: Image) -> void:
+	var x: int = 222
+	var top: int = 34
+	# chimney into the wall
+	_rect(img, x + 22, 0, 18, top, STONE_D)
+	_frame(img, x + 22, 0, 18, top, MORTAR)
+	for yy in range(0, top, 7):
+		_hline(img, x + 22, yy, 18, MORTAR)
+	# iron range
+	_rect(img, x, top, 62, 42, IRON)
+	_rect(img, x, top, 62, 3, STONE_D)
+	_hline(img, x, top + 3, 62, IRON.darkened(0.3))
+	_rect(img, x, top + 41, 62, 3, IRON.darkened(0.35))
+	# hot plate ring
+	_ellipse(img, float(x + 31), float(top + 3), 18.0, 3.0, IRON.darkened(0.5), 0.9)
+	# fire door with light behind it
+	_rect(img, x + 18, top + 18, 26, 18, INK)
+	_rect(img, x + 19, top + 19, 24, 16, AMBER_D)
+	_ellipse(img, float(x + 31), float(top + 30), 9.0, 5.0, AMBER, 0.75)
+	for i in range(3):
+		_vline(img, x + 24 + i * 7, top + 19, 16, IRON)
+	_frame(img, x + 18, top + 18, 26, 18, IRON.darkened(0.3))
+	# a ladle hanging on the front
+	_vline(img, x + 8, top + 12, 8, WOOD_L)
+	_rect(img, x + 6, top + 20, 5, 4, IRON)
+	# the pot, sitting on the ring
+	_rect(img, x + 14, top - 16, 34, 16, IRON)
+	_rect(img, x + 14, top - 16, 34, 2, IRON.darkened(0.3))
+	_hline(img, x + 14, top - 2, 34, IRON.darkened(0.45))
+	_rect(img, x + 30, top - 18, 2, 2, IRON.darkened(0.2))
+	_vline(img, x + 14, top - 14, 12, IRON.darkened(0.18))
+	_vline(img, x + 47, top - 14, 12, IRON.darkened(0.18))
+
+
+static func _kitchen_grade(img: Image) -> void:
+	var lights: Array = [
+		[LANTERN_XS[0], 25, 46.0, AMBER, 0.26],
+		[LANTERN_XS[1], 25, 46.0, AMBER, 0.26],
+		[275, 46, 62.0, AMBER_D, 0.40],
+		[7, 80, 40.0, AMBER_D, 0.22],
+	]
+	for entry in lights:
+		var lx: int = entry[0]
+		var ly: int = entry[1]
+		var r: float = entry[2]
+		var col: Color = entry[3]
+		var strength: float = entry[4]
+		for y in range(max(0, ly - int(r)), min(H, ly + int(r))):
+			for x in range(max(0, lx - int(r)), min(W, lx + int(r))):
+				var d: float = Vector2(float(x - lx), float(y - ly)).length()
+				if d < r:
+					var t: float = 1.0 - d / r
+					_mix(img, x, y, col, t * t * strength)
+	_ellipse(img, 275.0, 92.0, 44.0, 24.0, AMBER, 0.14)
+	for y in range(H):
+		for x in range(W):
+			var dx: float = (float(x) - W / 2.0) / (W * 0.66)
+			var dy: float = (float(y) - H / 2.0) / (H * 0.66)
+			var d: float = sqrt(dx * dx + dy * dy)
+			if d > 0.78:
+				_mix(img, x, y, INK, min(0.40, (d - 0.78) * 0.85))
 
 
 # --------------------------------------------------------------- text ------

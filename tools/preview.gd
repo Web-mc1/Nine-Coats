@@ -1,11 +1,12 @@
 extends SceneTree
 
-# There is no display in the build environment, so this renders the room by
+# There is no display in the build environment, so this renders the rooms by
 # compositing the game's own images by hand. It is not a screenshot of the
 # running game, but every pixel in it comes from the same art code the game
 # uses at runtime.
 
 const Art = preload("res://scripts/Art.gd")
+const Recipes = preload("res://scripts/Recipes.gd")
 
 var TABLES: Array = [
 	Vector2(96.0, 76.0), Vector2(160.0, 76.0), Vector2(224.0, 76.0),
@@ -13,30 +14,35 @@ var TABLES: Array = [
 	Vector2(96.0, 134.0), Vector2(160.0, 134.0), Vector2(224.0, 134.0),
 ]
 
+var SEAT_OFFSET := Vector2(0.0, 15.0)
+
 
 func _initialize() -> void:
-	var base: Image = _compose_world()
+	var base: Image = _compose_taproom()
 
 	var clean: Image = base.duplicate()
 	_draw_hud(clean, "19:12", 2, 14, 0.62)
-	_text(clean, "E    SERVE THE STEW", Vector2i(160 - Art.text_width("E    SERVE THE STEW") / 2, 168), Art.CREAM)
+	_prompt(clean, "E    SERVE THE MUSHROOM POTAGE")
 	_save(clean, "res://preview.png")
-	var big: Image = clean.duplicate()
-	big.resize(640, 360, Image.INTERPOLATE_NEAREST)
-	_save(big, "res://preview_2x.png")
+	_save(_twice(clean), "res://preview_2x.png")
 
 	var talk: Image = base.duplicate()
 	_draw_hud(talk, "19:12", 2, 14, 0.62)
 	_draw_dialogue(talk)
 	_save(talk, "res://preview_dialogue.png")
 
-	print("wrote preview.png and preview_dialogue.png")
+	var kitchen: Image = _compose_kitchen()
+	_draw_hud_on(kitchen, "19:40", 2, 14, 0.62)
+	_prompt(kitchen, "E    ADD THE THYME")
+	_save(kitchen, "res://preview_kitchen.png")
+	_save(_twice(kitchen), "res://preview_kitchen_2x.png")
+
+	print("wrote the preview images")
 	quit()
 
 
-func _compose_world() -> Image:
+func _compose_taproom() -> Image:
 	var img: Image = Art.room_image().duplicate()
-	# furniture, drawn in y order the way the game sorts it
 	var props: Array = [
 		[Art.make_plant(), Vector2(258.0, 64.0)],
 		[Art.make_cat(), Vector2(56.0, 68.0)],
@@ -45,28 +51,35 @@ func _compose_world() -> Image:
 	]
 	for p in props:
 		_blit_base(img, p[0], p[1])
+
 	for i in range(TABLES.size()):
 		var t: Vector2 = TABLES[i]
+		_blit_base(img, Art.make_chair(), t + SEAT_OFFSET + Vector2(0.0, 1.0))
 		_blit_base(img, Art.make_table(), t)
 		_blit_base(img, Art.make_stool(), t + Vector2(0.0, 2.0))
-	for c in [1, 4, 8]:
+
+	for c in [0, 4, 8]:
 		_blit_base(img, Art.make_candle(), TABLES[c] + Vector2(0.0, -6.0))
 	_blit_base(img, Art.make_counter(), Vector2(46.0, 146.0))
 
 	# the fire
 	_blit_at(img, Art.fire_frames()[1].get_image(), Vector2i(25 - 8, 54 - 16))
 
-	# characters: the innkeeper, and three guests at their tables
+	# the guests, sitting on their chairs, two of them eating
+	_blit_sit(img, "badger", 0, TABLES[0] + SEAT_OFFSET)
+	_blit_sit(img, "heron", 2, TABLES[3] + SEAT_OFFSET)
+	_blit_sit(img, "mole", 0, TABLES[5] + SEAT_OFFSET)
+	_blit_base(img, Art.make_plate(Recipes.dish_col(0)), TABLES[0] + Vector2(0.0, -7.0))
+	_blit_base(img, Art.make_plate(Recipes.dish_col(5)), TABLES[3] + Vector2(0.0, -7.0))
+
+	# the innkeeper, behind the counter
 	_blit_char(img, "player", 0, 0, Vector2(86.0, 120.0))
-	_blit_char(img, "badger", 1, 0, TABLES[0] + Vector2(0.0, 15.0))
-	_blit_char(img, "heron", 1, 0, TABLES[3] + Vector2(0.0, 15.0))
-	_blit_char(img, "mole", 1, 0, TABLES[5] + Vector2(0.0, 15.0))
 
-	# bowls on the served tables
-	_blit_base(img, Art.make_bowl(), TABLES[0] + Vector2(0.0, 13.0))
-	_blit_base(img, Art.make_bowl(), TABLES[3] + Vector2(0.0, 13.0))
+	# the order bubbles, above everyone
+	_blit_center(img, Art.make_order_bubble(Recipes.dish_col(0)), TABLES[0] + SEAT_OFFSET + Vector2(0.0, -26.0))
+	_blit_center(img, Art.make_order_bubble(Recipes.dish_col(5)), TABLES[5] + SEAT_OFFSET + Vector2(0.0, -26.0))
 
-	# coats on the rack
+	# three coats on the rack
 	var coats: Array = [
 		[Color8(112, 96, 78), 1],
 		[Color8(92, 108, 132), 4],
@@ -79,7 +92,30 @@ func _compose_world() -> Image:
 	return img
 
 
+func _compose_kitchen() -> Image:
+	var img: Image = Art.kitchen_image().duplicate()
+	_blit_base(img, Art.make_barrel(), Vector2(60.0, 120.0))
+	_blit_base(img, Art.make_crate(), Vector2(236.0, 118.0))
+	# something bubbling away in the pot
+	_blit_center(img, Art.make_pot_fill(Recipes.dish_col(3)), Vector2(253.0, 22.0))
+	_blit_center(img, Art.bubbles()[1], Vector2(253.0, 12.0))
+	# the innkeeper, thinking about what to cook
+	_blit_char(img, "player", 1, 0, Vector2(200.0, 104.0))
+	_tint(img, Color(0.85, 0.85, 0.89, 1.0))
+	return img
+
+
+func _twice(img: Image) -> Image:
+	var big: Image = img.duplicate()
+	big.resize(640, 360, Image.INTERPOLATE_NEAREST)
+	return big
+
+
 func _draw_hud(img: Image, clock: String, night: int, coins: int, fire: float) -> void:
+	_draw_hud_on(img, clock, night, coins, fire)
+
+
+func _draw_hud_on(img: Image, clock: String, night: int, coins: int, fire: float) -> void:
 	_blit_at(img, Art.make_panel(320, 28, Color(0.10, 0.086, 0.112, 0.95), Art.AMBER_D).get_image(), Vector2i(0, 152))
 	_text(img, clock, Vector2i(6, 157), Art.CREAM)
 	_text(img, "NIGHT %d" % night, Vector2i(46, 157), Art.AMBER_D)
@@ -93,14 +129,17 @@ func _draw_hud(img: Image, clock: String, night: int, coins: int, fire: float) -
 			img.set_pixel(222 + x, 159 + y, Art.AMBER)
 	var label: String = "COINS %d" % coins
 	_text(img, label, Vector2i(314 - Art.text_width(label), 157), Art.AMBER)
-	_blit_at(img, Art.make_bowl().get_image(), Vector2i(302, 167))
-	_text(img, "", Vector2i(0, 0), Art.AMBER_D)
+	_blit_at(img, Art.make_plate(Recipes.dish_col(0)).get_image(), Vector2i(298, 164))
+
+
+func _prompt(img: Image, s: String) -> void:
+	_text(img, s, Vector2i(160 - Art.text_width(s) / 2, 168), Art.CREAM)
 
 
 func _draw_dialogue(img: Image) -> void:
 	_blit_at(img, Art.make_panel(300, 42, Color(0.11, 0.09, 0.11, 0.96), Art.AMBER_D).get_image(), Vector2i(10, 104))
 	_text(img, "BRAMBLE   BADGER, CARTOGRAPHER", Vector2i(18, 109), Art.AMBER)
-	_text(img, "I keep redrawing it. It ends in the same place.", Vector2i(18, 120), Art.CREAM)
+	_text(img, "I WAS HOPING FOR THE MUSHROOM POTAGE.", Vector2i(18, 120), Art.CREAM)
 	_text(img, "E    ...", Vector2i(18, 133), Art.AMBER_D)
 
 
@@ -108,12 +147,25 @@ func _blit_base(img: Image, tex: Texture2D, pos: Vector2) -> void:
 	var src: Image = tex.get_image()
 	if src.get_format() != Image.FORMAT_RGBA8:
 		src.convert(Image.FORMAT_RGBA8)
-	var at: Vector2i = Vector2i(int(pos.x) - src.get_width() / 2, int(pos.y) - src.get_height())
-	_blit_at(img, src, at)
+	_blit_at(img, src, Vector2i(int(pos.x) - src.get_width() / 2, int(pos.y) - src.get_height()))
+
+
+func _blit_center(img: Image, tex: Texture2D, pos: Vector2) -> void:
+	var src: Image = tex.get_image()
+	if src.get_format() != Image.FORMAT_RGBA8:
+		src.convert(Image.FORMAT_RGBA8)
+	_blit_at(img, src, Vector2i(int(pos.x) - src.get_width() / 2, int(pos.y) - src.get_height() / 2))
 
 
 func _blit_char(img: Image, kind: String, dir: int, frame: int, pos: Vector2) -> void:
 	var src: Image = Art.char_tex(kind, dir, frame).get_image()
+	if src.get_format() != Image.FORMAT_RGBA8:
+		src.convert(Image.FORMAT_RGBA8)
+	_blit_at(img, src, Vector2i(int(pos.x) - 6, int(pos.y) - 16))
+
+
+func _blit_sit(img: Image, kind: String, frame: int, pos: Vector2) -> void:
+	var src: Image = Art.sit_tex(kind, 0, frame).get_image()
 	if src.get_format() != Image.FORMAT_RGBA8:
 		src.convert(Image.FORMAT_RGBA8)
 	_blit_at(img, src, Vector2i(int(pos.x) - 6, int(pos.y) - 16))
@@ -145,11 +197,7 @@ func _text(img: Image, s: String, at: Vector2i, col: Color) -> void:
 				var a: float = atlas.get_pixel(cell.x + x, cell.y + y).a
 				if a <= 0.5:
 					continue
-				var px: int = at.x + i * 6 + x
-				var py: int = at.y + y
-				if px < 0 or py < 0 or px >= img.get_width() or py >= img.get_height():
-					continue
-				img.set_pixel(px, py, col)
+				img.set_pixel(at.x + i * 6 + x, at.y + y, col)
 
 
 func _save(img: Image, path: String) -> void:

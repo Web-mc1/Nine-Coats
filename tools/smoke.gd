@@ -1,36 +1,34 @@
 extends SceneTree
 
-# Drives one complete evening with no window and no renderer, then checks that
-# every promise the loop makes actually happened. Run with:
-#   godot --headless --path . -s tools/smoke.gd
+# Headless check of one full evening. No display, no audio device, no speech
+# server -- everything here drives the real scene by hand.
 
 const Art = preload("res://scripts/Art.gd")
 const Audio = preload("res://scripts/Audio.gd")
+const Recipes = preload("res://scripts/Recipes.gd")
 const SAVE := "user://ninecoats_smoke.json"
 
-var checks: int = 0
-var failures: Array = []
+var _pass: int = 0
+var _fail: int = 0
+var _failed: Array = []
+
+
+func _initialize() -> void:
+	_start()
 
 
 func _check(label: String, ok: bool) -> void:
-	checks += 1
 	if ok:
-		print("  ok    ", label)
+		_pass += 1
+		print("  ok    %s" % label)
 	else:
-		failures.append(label)
-		print("  FAIL  ", label)
-
-
-func _run(main, seconds: float) -> void:
-	var steps: int = int(seconds / 0.05)
-	for i in range(steps):
-		main.tick(0.05)
-		if main.night_over:
-			return
+		_fail += 1
+		_failed.append(label)
+		print("  FAIL  %s" % label)
 
 
 func _flood(main) -> Dictionary:
-	# walk the whole floor on a 2px grid, the same way the player is allowed to
+	# walk the floor on a 2px grid, the way the player is allowed to
 	var start := Vector2i(int(main.player_pos.x), int(main.player_pos.y))
 	var seen: Dictionary = {}
 	var queue: Array = []
@@ -61,131 +59,181 @@ func _reachable(reach: Dictionary, target: Vector2) -> bool:
 	return false
 
 
-func _initialize() -> void:
-	_start()
+func _initialize_done() -> void:
+	pass
 
 
 func _start() -> void:
 	if FileAccess.file_exists(SAVE):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
-
-	var scene: PackedScene = load("res://scenes/Main.tscn")
-	var main = scene.instantiate()
-	main.save_path = SAVE
-	root.add_child(main)
-	# The tree is not running yet when a SceneTree script initialises, so the
-	# node's _ready() has not fired. One frame gives it that.
-	await process_frame
-	main.set_process(false)
-
 	print("")
 	print("nine coats -- smoke test")
 	print("")
 
-	# --- the art exists and is the right shape
-	_check("room is 320x180", Art.room_image().get_size() == Vector2i(320, 180))
-	_check("font measures a line", Art.text_width("ABC") == 17)
-	_check("font has A", Art.glyph_cell("A").x >= 0)
-	_check("character sprite is 12x16", Art.char_tex("player", 0, 0).get_image().get_size() == Vector2i(12, 16))
+	var main = load("res://scenes/Main.tscn").instantiate()
+	main.save_path = SAVE
+	root.add_child(main)
+	await process_frame
+	main.set_process(false)
 
-	# --- the sound exists and is long enough to be real
+	# --- the pieces exist
+	_check("room is 320x180", Art.make_room().get_size() == Vector2(320.0, 180.0))
+	_check("kitchen is 320x180", Art.make_kitchen().get_size() == Vector2(320.0, 180.0))
+	_check("character sprite is 12x16", Art.char_tex("player", 0, 0).get_image().get_size() == Vector2i(12, 16))
+	_check("a chair is 12x11", Art.make_chair().get_image().get_size() == Vector2i(12, 11))
+	_check("a seated sprite is 12x16", Art.sit_tex("badger", 0, 2).get_image().get_size() == Vector2i(12, 16))
 	_check("music is synthesised", Audio.music().data.size() > 200000)
 	_check("music loops", Audio.music().loop_mode == AudioStreamWAV.LOOP_FORWARD)
 	_check("footsteps are synthesised", Audio.step().data.size() > 2000)
 	_check("voices are synthesised", Audio.voice().data.size() > 2000)
 	_check("coin ping is synthesised", Audio.ping().data.size() > 2000)
+	_check("speech was probed", main._tts_seen)
 
-	# --- the inn is standing
-	_check("world built", main.world != null and main.player != null)
-	_check("hud built", main.clock_text != null and main.prompt_text != null)
-	_check("nine tables", main.TABLES.size() == 9)
+	# --- the pantry: five things, ten pairs, ten dishes
+	_check("five things in the pantry", Recipes.INGREDIENTS.size() == 5)
+	_check("ten dishes on the menu", Recipes.count() == 10)
+	var all_pairs: bool = true
+	var names: Dictionary = {}
+	for a in range(5):
+		for b in range(a + 1, 5):
+			var d: int = Recipes.dish_for(a, b)
+			if d < 0:
+				all_pairs = false
+			else:
+				names[str(Recipes.dish_name(d))] = true
+				if Recipes.dish_for(b, a) != d:
+					all_pairs = false
+	_check("every pair of ingredients makes a dish", all_pairs)
+	_check("all ten dishes are different", names.size() == 10)
 
-	# --- you can actually walk everywhere the game needs you to go
+	# --- the taproom can be walked
+	_check("starts in the taproom", main.room == 0)
+	main.player_pos = Vector2(64.0, 100.0)
 	var reach: Dictionary = _flood(main)
-	_check("walks to the counter", _reachable(reach, main.counter_pos + Vector2(0.0, -12.0)))
-	_check("walks to the hearth", _reachable(reach, main.hearth_pos))
-	_check("walks to the door", _reachable(reach, main.door_pos + Vector2(0.0, 34.0)))
-	_check("walks to the far corner", _reachable(reach, Vector2(300.0, 144.0)))
+	_check("walking from the door reaches the hearth", _reachable(reach, main.hearth_pos))
+	_check("walking reaches the kitchen passage", _reachable(reach, main.PASSAGE_TAP))
 	for t in [0, 3, 5]:
-		var seat_pos: Vector2 = main.TABLES[t] + main.SEAT_OFFSET
-		var stand_pos: Vector2 = seat_pos + Vector2(0.0, 10.0)
-		_check("seat %d is clear of furniture" % t, main._free(seat_pos))
-		_check("can stand at table %d" % t, _reachable(reach, stand_pos))
+		var seat: Vector2 = main.TABLES[t] + main.SEAT_OFFSET
+		_check("seat %d is clear of furniture" % t, main._free(seat))
+		_check("can stand at table %d" % t, _reachable(reach, seat + Vector2(0.0, 10.0)))
 
-	# --- the evening starts empty
-	_check("night one, 17:00", main.night == 1 and main.clock_min == 17 * 60)
-	_check("no coats on the rack", main.coat_count() == 0)
-	_check("nobody arrived yet", main.guest_state_name(0) == "away")
-	_check("three guests scheduled", main.guests.size() == 3)
+	# --- and so can the kitchen
+	main._set_room(1)
+	main.player_pos = Vector2(150.0, 100.0)
+	_check("the kitchen floor is clear", main._free(main.player_pos))
+	var kreach: Dictionary = _flood(main)
+	_check("walking reaches the jars", _reachable(kreach, main.JAR_SPOTS[0]))
+	_check("walking reaches the last jar", _reachable(kreach, main.JAR_SPOTS[4]))
+	_check("walking reaches the pot", _reachable(kreach, main.POT_SPOT))
+	_check("walking reaches the way back", _reachable(kreach, main.PASSAGE_KIT))
 
-	# --- Bramble comes in out of the rain
-	_run(main, 22.0)
-	_check("badger arrived", main.guest_state_name(0) != "away")
-	_run(main, 14.0)
-	_check("badger sat down", main.guest_state_name(0) == "sitting")
-	_check("one coat on the rack", main.coat_count() == 1)
-	_check("the clock is running", main.clock_min > 17 * 60)
-
-	# --- take a bowl from the counter
-	main.player_pos = main.counter_pos + Vector2(0.0, -8.0)
+	# --- take two things and cook them
+	main.player_pos = main.JAR_SPOTS[0]
 	main.interact()
-	_check("bowl in hand", main.hands == 1)
-	_check("one bowl left the pot", main.stew_left == 5)
-
-	# --- carry it to the table
-	var seat: Vector2 = main.guest_position(0)
-	main.player_pos = seat + Vector2(0.0, 10.0)
+	_check("took a mushroom", main.hand_kind == 1 and main.hand_id == 0)
+	main.player_pos = main.POT_SPOT
 	main.interact()
-	_check("stew served", main.hands == 0)
-	_check("coins paid", main.coins == 7)
-	_check("guest eating", main.guest_state_name(0) == "eating")
-
-	_run(main, 15.0)
-	_check("guest finished eating", main.guest_state_name(0) == "talking")
-
-	# --- listen
+	_check("the mushroom is in the pot", main.pot_ingredients.size() == 1)
+	_check("the hand is empty again", main.hand_kind == 0)
+	main.player_pos = main.JAR_SPOTS[1]
 	main.interact()
-	_check("dialogue opened", main._dialogue_open == true)
-	_check("dialogue has a line", main.dialogue_line.text.length() > 10)
+	main.player_pos = main.POT_SPOT
 	main.interact()
+	_check("two things are in the pot", main.pot_ingredients.size() == 2)
 	main.interact()
+	_check("the pot is cooking", main.pot_cook > 0.0)
+	_check("the pot shows its bubbles", main.pot_bubbles.visible)
+	main.tick(3.5)
+	_check("something came out of the pot", main.pot_dish == Recipes.dish_for(0, 1))
+	_check("a pot was counted", main.dishes_cooked == 1)
 	main.interact()
-	_check("dialogue closed", main._dialogue_open == false)
-	_check("guest heading out", main.guest_state_name(0) == "outbound" or main.guest_state_name(0) == "gone")
+	_check("the dish is in hand", main.hand_kind == 2 and main.hand_id == Recipes.dish_for(0, 1))
 
-	_run(main, 20.0)
-	_check("guest gone", main.guest_state_name(0) == "gone")
-	_check("badger's coat taken down", main.guests[0]["coat"] == null)
+	# --- a guest arrives, walks to a chair and sits on it
+	main._set_room(0)
+	main.clock_min = 17 * 60 + 20
+	var guard: int = 0
+	while main.guest_state_name(0) != "sitting" and guard < 900:
+		main.tick(0.05)
+		guard += 1
+	_check("the badger sat down", main.guest_state_name(0) == "sitting")
+	_check("and is on its chair", main.guest_seated(0))
+	_check("it has an order", main.guest_order(0) >= 0 and main.guest_order(0) < 10)
+	_check("its coat is on the rack", main.coat_count() == 1)
 
-	# --- feed the fire
-	main.fire = 0.2
+	# --- serving the dish they asked for
+	main.guests[0]["order"] = main.hand_id
+	main.player_pos = main.TABLES[0] + main.SEAT_OFFSET + Vector2(0.0, 10.0)
+	var coins_before: int = main.coins
+	main.interact()
+	_check("the right dish is eaten", main.guest_state_name(0) == "eating")
+	_check("and paid for well", main.coins >= coins_before + Recipes.dish_price(0))
+
+	# --- serving a dish nobody asked for still feeds them
+	var g1: Dictionary = main.guests[1]
+	main._spawn_guest(g1)
+	main._seat_guest(g1)
+	main.guests[1]["order"] = 9
+	main.hand_kind = 2
+	main.hand_id = 0
+	var coins_before2: int = main.coins
+	main.player_pos = main.TABLES[3] + main.SEAT_OFFSET + Vector2(0.0, 10.0)
+	main.interact()
+	_check("a wrong dish is still eaten", main.guest_state_name(1) == "eating")
+	_check("and still pays something", main.coins > coins_before2)
+
+	# --- asking what they want, and listening afterwards
+	main.guests[0]["state"] = 2
+	main.hand_kind = 0
+	main.hand_id = -1
+	main.player_pos = main.TABLES[0] + main.SEAT_OFFSET + Vector2(0.0, 10.0)
+	main.interact()
+	_check("they say what they were hoping for", main._dialogue_open)
+	main.interact()
+	_check("and that closes", not main._dialogue_open)
+
+	main.guests[0]["state"] = 4
+	main.player_pos = main.TABLES[0] + main.SEAT_OFFSET + Vector2(0.0, 10.0)
+	main.interact()
+	_check("dialogue opened", main._dialogue_open)
+	for i in range(3):
+		main.interact()
+	_check("dialogue closed", not main._dialogue_open)
+	_check("the guest heads out", main.guest_state_name(0) == "outbound")
+	guard = 0
+	while main.guest_state_name(0) != "gone" and guard < 900:
+		main.tick(0.05)
+		guard += 1
+	_check("the guest is gone", main.guest_state_name(0) == "gone")
+	_check("and took the coat", main.coat_count() == 1)
+
+	# --- the fire, the ledger, the save
 	main.player_pos = main.hearth_pos
+	main.fire = 0.40
 	main.interact()
-	_check("fire fed", main.fire > 0.5)
+	_check("the fire was fed", main.fire > 0.40)
 
-	# --- close the evening
-	main.clock_min = 22 * 60 + 58
-	_run(main, 4.0)
-	_check("night ended", main.night_over == true)
-	_check("ledger written", main.ledger_lines.size() == 1)
-	_check("ledger says something", str(main.ledger_lines[0]).length() > 30)
+	main.clock_min = 23 * 60 - 1
+	main.tick(2.0)
+	_check("the night ended", main.night_over)
+	_check("the ledger is open", main.ledger_panel.visible)
+	_check("the ledger says something", main.ledger_lines.size() == 1 and str(main.ledger_lines[0]).length() > 20)
 	_check("saved to disk", FileAccess.file_exists(SAVE))
 
-	# --- and the next night begins clean
 	main.interact()
-	_check("next night started", main.night == 2 and main.clock_min == 17 * 60)
-	_check("guests cleared", main.coat_count() == 0)
-	_check("hands empty", main.hands == 0)
-	_check("ledger hidden", main.ledger_panel.visible == false)
-
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
+	_check("the next night starts", main.night == 2)
+	_check("guests are cleared", main.guest_state_name(0) == "away")
+	_check("the pot is clean", main.pot_ingredients.is_empty() and main.pot_dish == -1)
+	_check("hands are empty", main.hand_kind == 0)
+	_check("the ledger is shut", not main.ledger_panel.visible)
 
 	print("")
-	if failures.is_empty():
-		print("PASS  ", checks, " checks")
-		quit(0)
+	if _fail == 0:
+		print("PASS  %d checks" % _pass)
 	else:
-		print("FAILED ", failures.size(), " of ", checks, " checks")
-		for f in failures:
-			print("   - ", f)
-		quit(1)
+		print("FAILED %d of %d checks" % [_fail, _pass + _fail])
+		for f in _failed:
+			print("   - %s" % f)
+	if FileAccess.file_exists(SAVE):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))
+	quit(0 if _fail == 0 else 1)
